@@ -1,0 +1,58 @@
+import { create } from 'zustand'
+import type { MenuItem } from '../components/ContextMenu'
+import type { User } from '../types'
+
+export type AppPhase = 'login' | 'app'
+
+interface ContextMenuState {
+  open: boolean
+  x: number
+  y: number
+  items: MenuItem[]
+}
+
+interface ProfileState {
+  open: boolean
+  user: User | null
+  x: number
+  y: number
+}
+
+interface AppState {
+  phase: AppPhase
+  banner: string // transient error/status banner
+  contextMenu: ContextMenuState
+  profile: ProfileState
+  lightboxUrl: string | null
+  showFriends: boolean
+  setPhase: (p: AppPhase) => void
+  setBanner: (b: string) => void
+  setShowFriends: (v: boolean) => void
+  openContextMenu: (x: number, y: number, items: MenuItem[]) => void
+  closeContextMenu: () => void
+  openProfile: (user: User, x: number, y: number) => void
+  closeProfile: () => void
+  openLightbox: (url: string) => void
+  closeLightbox: () => void
+}
+
+export const useAppStore = create<AppState>((set) => ({
+  phase: 'login',
+  banner: '',
+  contextMenu: { open: false, x: 0, y: 0, items: [] },
+  profile: { open: false, user: null, x: 0, y: 0 },
+  lightboxUrl: null,
+  showFriends: false,
+  setPhase: (phase) => set({ phase }),
+  setBanner: (banner) => set({ banner }),
+  setShowFriends: (showFriends) => set({ showFriends }),
+  openContextMenu: (x, y, items) =>
+    set({ contextMenu: { open: true, x, y, items } }),
+  closeContextMenu: () =>
+    set((s) => ({ contextMenu: { ...s.contextMenu, open: false } })),
+  openProfile: (user, x, y) => set({ profile: { open: true, user, x, y } }),
+  closeProfile: () =>
+    set((s) => ({ profile: { ...s.profile, open: false } })),
+  openLightbox: (url) => set({ lightboxUrl: url }),
+  closeLightbox: () => set({ lightboxUrl: null }),
+}))

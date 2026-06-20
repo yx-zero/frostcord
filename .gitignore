@@ -1,0 +1,23 @@
+# Build output
+build/bin/
+
+# Test screenshots (dev artifacts)
+build/*.png
+!build/appicon.png
+
+# Dependencies
+node_modules/
+
+# Frontend build output
+frontend/dist/
+
+# Go
+*.exe
+*.test
+*.out
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
