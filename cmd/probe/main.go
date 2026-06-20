@@ -42,17 +42,18 @@ func (h *probeHandler) OnMessageCreate(m *discord.Message) {
 	h.got++
 	fmt.Printf("[MSG] #%s <%s> %s\n", m.ChannelID, m.Author.Username, m.Content)
 }
-func (h *probeHandler) OnMessageUpdate(m *discord.Message)             {}
-func (h *probeHandler) OnMessageDelete(channelID, messageID string)    {}
+func (h *probeHandler) OnMessageUpdate(m *discord.Message)          {}
+func (h *probeHandler) OnMessageDelete(channelID, messageID string) {}
 func (h *probeHandler) OnMemberListUpdate(guildID string, members []discord.User) {
 	fmt.Printf("[MEMBERS] guild=%s got %d members\n", guildID, len(members))
 }
-func (h *probeHandler) OnTypingStart(channelID, userID string)               {}
-func (h *probeHandler) OnPresenceUpdate(userID, status string)               {}
-func (h *probeHandler) OnReactionAdd(c, m, u string, e discord.Emoji)        {}
-func (h *probeHandler) OnReactionRemove(c, m, u string, e discord.Emoji)     {}
-func (h *probeHandler) OnError(err error)                              { fmt.Println("[ERR]", err) }
-func (h *probeHandler) OnStatus(status string)                         { fmt.Println("[STATUS]", status) }
+func (h *probeHandler) OnTypingStart(channelID, userID string)                                    {}
+func (h *probeHandler) OnPresenceUpdate(userID, status string)                                    {}
+func (h *probeHandler) OnReactionAdd(c, m, u string, e discord.Emoji)                             {}
+func (h *probeHandler) OnReactionRemove(c, m, u string, e discord.Emoji)                          {}
+func (h *probeHandler) OnAutocompleteResponse(nonce string, choices []discord.AutocompleteChoice) {}
+func (h *probeHandler) OnError(err error)                                                         { fmt.Println("[ERR]", err) }
+func (h *probeHandler) OnStatus(status string)                                                    { fmt.Println("[STATUS]", status) }
 
 func main() {
 	if len(os.Args) < 2 {

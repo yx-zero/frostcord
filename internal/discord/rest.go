@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -119,7 +120,7 @@ func (r *REST) do(method, path string, body any, out any) error {
 		return fmt.Errorf("discord %s %s: %d %s", method, path, resp.StatusCode, string(data))
 	}
 
-	if out != nil {
+	if out != nil && len(data) > 0 {
 		if err := json.Unmarshal(data, out); err != nil {
 			return fmt.Errorf("decode %s: %w", path, err)
 		}
@@ -406,6 +407,247 @@ func (r *REST) SendMessageWithFiles(channelID, content, nonce string, files []Up
 		return nil, err
 	}
 	return &m, nil
+}
+
+// SearchCommands lists the slash commands available in a channel/guild via the
+// application-command-index endpoint (the documented mechanism the official
+// client uses). For guild channels it queries the guild index; for DMs it falls
+// back to the channel index. The optional query filters by command name prefix
+// client-side. Returns the index's applications + commands.
+func (r *REST) SearchCommands(guildID, channelID, query string) (*CommandSearchResult, error) {
+	var path string
+	if guildID != "" && guildID != "@me" {
+		path = "/guilds/" + guildID + "/application-command-index"
+	} else {
+		path = "/channels/" + channelID + "/application-command-index"
+	}
+	var res CommandSearchResult
+	if err := r.do(http.MethodGet, path, nil, &res); err != nil {
+		return nil, err
+	}
+	// Keep only CHAT_INPUT (slash) commands, and filter by the query prefix.
+	q := strings.ToLower(query)
+	filtered := make([]ApplicationCommand, 0, len(res.Commands))
+	for _, c := range res.Commands {
+		if c.Type != 0 && c.Type != CmdTypeChatInput {
+			continue // skip user/message context-menu commands
+		}
+		if q != "" && !strings.HasPrefix(strings.ToLower(c.Name), q) {
+			continue
+		}
+		filtered = append(filtered, c)
+	}
+	res.Commands = filtered
+	return &res, nil
+}
+
+// InteractionAttachment is a pre-uploaded file referenced by a slash command's
+// attachment option. ID is the per-interaction index ("0", "1", ...).
+type InteractionAttachment struct {
+	ID               string // index matching the option value
+	Filename         string
+	UploadedFilename string // returned by RequestAttachmentUploads
+}
+
+// uploadSlot is one entry from the POST /channels/{id}/attachments response.
+type uploadSlot struct {
+	ID             int    `json:"id"`
+	UploadURL      string `json:"upload_url"`
+	UploadFilename string `json:"upload_filename"`
+}
+
+// RequestAttachmentUploads reserves upload slots for the given files and returns
+// signed upload URLs. This is step 1 of Discord's pre-upload flow.
+func (r *REST) RequestAttachmentUploads(channelID string, files []UploadFile) ([]uploadSlot, error) {
+	reqFiles := make([]map[string]any, 0, len(files))
+	for i, f := range files {
+		reqFiles = append(reqFiles, map[string]any{
+			"id":        i,
+			"filename":  f.Filename,
+			"file_size": len(f.Data),
+		})
+	}
+	body := map[string]any{"files": reqFiles}
+	var resp struct {
+		Attachments []uploadSlot `json:"attachments"`
+	}
+	if err := r.do(http.MethodPost, "/channels/"+channelID+"/attachments", body, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Attachments, nil
+}
+
+// uploadToURL PUTs raw bytes to a signed upload URL (step 2). No auth header —
+// the URL is pre-signed.
+func (r *REST) uploadToURL(url string, data []byte) error {
+	req, err := http.NewRequest(http.MethodPut, url, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/octet-stream")
+	resp, err := r.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("upload PUT failed: %d %s", resp.StatusCode, string(b))
+	}
+	return nil
+}
+
+// UploadCommandAttachments runs the full pre-upload flow for files used in a
+// slash command's attachment options, returning references to embed in the
+// interaction's data.attachments array.
+func (r *REST) UploadCommandAttachments(channelID string, files []UploadFile) ([]InteractionAttachment, error) {
+	if len(files) == 0 {
+		return nil, nil
+	}
+	slots, err := r.RequestAttachmentUploads(channelID, files)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]InteractionAttachment, 0, len(slots))
+	for _, s := range slots {
+		if s.ID < 0 || s.ID >= len(files) {
+			continue
+		}
+		if err := r.uploadToURL(s.UploadURL, files[s.ID].Data); err != nil {
+			return nil, err
+		}
+		out = append(out, InteractionAttachment{
+			ID:               fmt.Sprintf("%d", s.ID),
+			Filename:         files[s.ID].Filename,
+			UploadedFilename: s.UploadFilename,
+		})
+	}
+	return out, nil
+}
+
+// AutocompleteChoice is one suggestion returned for an autocomplete option.
+type AutocompleteChoice struct {
+	Name  string `json:"name"`
+	Value any    `json:"value"`
+}
+
+// Autocomplete fires a type-4 (APPLICATION_COMMAND_AUTOCOMPLETE) interaction for
+// the focused option. This is fire-and-forget: Discord ACKs with 204 and the
+// bot's choices arrive asynchronously over the gateway as an
+// APPLICATION_COMMAND_AUTOCOMPLETE_RESPONSE dispatch, correlated by nonce. The
+// caller must listen for that dispatch (matching the nonce it passed in).
+// focusedName is the option being typed; options should mirror the command's
+// real structure (sub-command nesting + correct option types).
+func (r *REST) Autocomplete(
+	guildID, channelID, sessionID, nonce string,
+	cmd ApplicationCommand,
+	options []InteractionOption,
+	focusedName string,
+) error {
+	if options == nil {
+		options = []InteractionOption{}
+	}
+	// Recursively serialize options, marking the focused one (at any nesting
+	// level) so Discord/the bot knows which option to complete.
+	var toRaw func(opts []InteractionOption) []map[string]any
+	toRaw = func(opts []InteractionOption) []map[string]any {
+		raw := make([]map[string]any, 0, len(opts))
+		for _, o := range opts {
+			m := map[string]any{"type": o.Type, "name": o.Name}
+			if len(o.Options) > 0 {
+				m["options"] = toRaw(o.Options)
+			} else {
+				if o.Value != nil {
+					m["value"] = o.Value
+				}
+				if o.Name == focusedName {
+					m["focused"] = true
+				}
+			}
+			raw = append(raw, m)
+		}
+		return raw
+	}
+	rawOpts := toRaw(options)
+	data := map[string]any{
+		"version": cmd.Version,
+		"id":      cmd.ID,
+		"name":    cmd.Name,
+		"type":    cmd.Type,
+		"options": rawOpts,
+	}
+	body := map[string]any{
+		"type":           4, // APPLICATION_COMMAND_AUTOCOMPLETE
+		"application_id": cmd.ApplicationID,
+		"channel_id":     channelID,
+		"session_id":     sessionID,
+		"nonce":          nonce,
+		"data":           data,
+	}
+	if guildID != "" && guildID != "@me" {
+		body["guild_id"] = guildID
+	}
+	// 204 No Content on success; choices come via the gateway.
+	return r.do(http.MethodPost, "/interactions", body, nil)
+}
+
+// ExecuteCommand invokes a slash command by POSTing an APPLICATION_COMMAND
+// interaction (type 2). guildID may be empty for DMs. sessionID must be the live
+// gateway session id; nonce should be a fresh snowflake-like value. attachments
+// are pre-uploaded files referenced by attachment options. The bot's reply
+// arrives asynchronously over the gateway (MESSAGE_CREATE), not here.
+func (r *REST) ExecuteCommand(
+	guildID, channelID, sessionID, nonce string,
+	cmd ApplicationCommand,
+	options []InteractionOption,
+	attachments []InteractionAttachment,
+) error {
+	if options == nil {
+		options = []InteractionOption{}
+	}
+	attMeta := make([]map[string]any, 0, len(attachments))
+	for _, a := range attachments {
+		attMeta = append(attMeta, map[string]any{
+			"id":                a.ID,
+			"filename":          a.Filename,
+			"uploaded_filename": a.UploadedFilename,
+		})
+	}
+	data := map[string]any{
+		"version":     cmd.Version,
+		"id":          cmd.ID,
+		"name":        cmd.Name,
+		"type":        cmd.Type,
+		"options":     options,
+		"attachments": attMeta,
+		// Newer clients echo the full command object back for server-side
+		// validation; include it to match the official request shape.
+		"application_command": map[string]any{
+			"id":             cmd.ID,
+			"application_id": cmd.ApplicationID,
+			"version":        cmd.Version,
+			"type":           cmd.Type,
+			"name":           cmd.Name,
+			"description":    cmd.Description,
+			"options":        cmd.Options,
+			"dm_permission":  true,
+			"contexts":       nil,
+		},
+	}
+	body := map[string]any{
+		"type":               2, // APPLICATION_COMMAND
+		"application_id":     cmd.ApplicationID,
+		"channel_id":         channelID,
+		"session_id":         sessionID,
+		"nonce":              nonce,
+		"data":               data,
+		"analytics_location": "slash_ui",
+	}
+	if guildID != "" && guildID != "@me" {
+		body["guild_id"] = guildID
+	}
+	// /interactions returns 204 No Content on success; errors carry a JSON body.
+	return r.do(http.MethodPost, "/interactions", body, nil)
 }
 
 // SearchGifs queries Discord's Tenor proxy for GIFs.

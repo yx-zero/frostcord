@@ -22,6 +22,20 @@ export namespace discord {
 	        this.height = source["height"];
 	    }
 	}
+	export class AutocompleteChoice {
+	    name: string;
+	    value: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new AutocompleteChoice(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.value = source["value"];
+	    }
+	}
 	export class User {
 	    id: string;
 	    username: string;
@@ -408,6 +422,42 @@ export namespace discord {
 		    return a;
 		}
 	}
+	export class MessageInteraction {
+	    id: string;
+	    type: number;
+	    name: string;
+	    user: User;
+	
+	    static createFrom(source: any = {}) {
+	        return new MessageInteraction(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.type = source["type"];
+	        this.name = source["name"];
+	        this.user = this.convertValues(source["user"], User);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class PollAnswerCount {
 	    id: number;
 	    count: number;
@@ -639,6 +689,7 @@ export namespace discord {
 	    referenced_message?: Message;
 	    components: Component[];
 	    poll?: Poll;
+	    interaction?: MessageInteraction;
 	
 	    static createFrom(source: any = {}) {
 	        return new Message(source);
@@ -664,6 +715,7 @@ export namespace discord {
 	        this.referenced_message = this.convertValues(source["referenced_message"], Message);
 	        this.components = this.convertValues(source["components"], Component);
 	        this.poll = this.convertValues(source["poll"], Poll);
+	        this.interaction = this.convertValues(source["interaction"], MessageInteraction);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -684,6 +736,7 @@ export namespace discord {
 		    return a;
 		}
 	}
+	
 	
 	
 	
@@ -813,6 +866,20 @@ export namespace main {
 	        this.name = source["name"];
 	    }
 	}
+	export class AutocompleteChoiceDTO {
+	    name: string;
+	    value: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AutocompleteChoiceDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.value = source["value"];
+	    }
+	}
 	export class ButtonDTO {
 	    label: string;
 	    style: number;
@@ -885,6 +952,161 @@ export namespace main {
 	        this.avatarUrl = source["avatarUrl"];
 	        this.subtitle = source["subtitle"];
 	        this.recipients = this.convertValues(source["recipients"], UserDTO);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CommandAttachmentInput {
+	    optionName: string;
+	    filename: string;
+	    data: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CommandAttachmentInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.optionName = source["optionName"];
+	        this.filename = source["filename"];
+	        this.data = source["data"];
+	    }
+	}
+	export class CommandChoiceDTO {
+	    name: string;
+	    value: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CommandChoiceDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.value = source["value"];
+	    }
+	}
+	export class CommandOptionDTO {
+	    type: number;
+	    name: string;
+	    description: string;
+	    required: boolean;
+	    autocomplete: boolean;
+	    choices: CommandChoiceDTO[];
+	    options: CommandOptionDTO[];
+	
+	    static createFrom(source: any = {}) {
+	        return new CommandOptionDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.required = source["required"];
+	        this.autocomplete = source["autocomplete"];
+	        this.choices = this.convertValues(source["choices"], CommandChoiceDTO);
+	        this.options = this.convertValues(source["options"], CommandOptionDTO);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CommandDTO {
+	    id: string;
+	    appId: string;
+	    version: string;
+	    type: number;
+	    name: string;
+	    description: string;
+	    botName: string;
+	    botIconUrl: string;
+	    options: CommandOptionDTO[];
+	
+	    static createFrom(source: any = {}) {
+	        return new CommandDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.appId = source["appId"];
+	        this.version = source["version"];
+	        this.type = source["type"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.botName = source["botName"];
+	        this.botIconUrl = source["botIconUrl"];
+	        this.options = this.convertValues(source["options"], CommandOptionDTO);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class CommandOptionInput {
+	    type: number;
+	    name: string;
+	    value: string;
+	    options: CommandOptionInput[];
+	
+	    static createFrom(source: any = {}) {
+	        return new CommandOptionInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.name = source["name"];
+	        this.value = source["value"];
+	        this.options = this.convertValues(source["options"], CommandOptionInput);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1052,6 +1274,20 @@ export namespace main {
 	        this.acronym = source["acronym"];
 	    }
 	}
+	export class InteractionDTO {
+	    name: string;
+	    userName: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new InteractionDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.userName = source["userName"];
+	    }
+	}
 	export class LoginResult {
 	    ok: boolean;
 	    error: string;
@@ -1192,6 +1428,7 @@ export namespace main {
 	    buttons: ButtonDTO[];
 	    poll?: PollDTO;
 	    replyTo?: ReplyDTO;
+	    interaction?: InteractionDTO;
 	    mentions: Record<string, string>;
 	
 	    static createFrom(source: any = {}) {
@@ -1215,6 +1452,7 @@ export namespace main {
 	        this.buttons = this.convertValues(source["buttons"], ButtonDTO);
 	        this.poll = this.convertValues(source["poll"], PollDTO);
 	        this.replyTo = this.convertValues(source["replyTo"], ReplyDTO);
+	        this.interaction = this.convertValues(source["interaction"], InteractionDTO);
 	        this.mentions = source["mentions"];
 	    }
 	

@@ -3,6 +3,7 @@ package discord
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -11,15 +12,15 @@ import (
 
 // Gateway opcodes (https://discord.com/developers/docs/topics/gateway)
 const (
-	opDispatch            = 0
-	opHeartbeat           = 1
-	opIdentify            = 2
-	opResume              = 6
-	opReconnect           = 7
-	opInvalidSession      = 9
-	opHello               = 10
-	opHeartbeatACK        = 11
-	opGuildSubscriptions  = 14 // lazy guild member-list request (user accounts)
+	opDispatch           = 0
+	opHeartbeat          = 1
+	opIdentify           = 2
+	opResume             = 6
+	opReconnect          = 7
+	opInvalidSession     = 9
+	opHello              = 10
+	opHeartbeatACK       = 11
+	opGuildSubscriptions = 14 // lazy guild member-list request (user accounts)
 )
 
 const gatewayURL = "wss://gateway.discord.gg/?v=9&encoding=json"
@@ -43,6 +44,7 @@ type EventHandler interface {
 	OnPresenceUpdate(userID, status string)
 	OnReactionAdd(channelID, messageID, userID string, emoji Emoji)
 	OnReactionRemove(channelID, messageID, userID string, emoji Emoji)
+	OnAutocompleteResponse(nonce string, choices []AutocompleteChoice)
 	OnError(err error)
 	OnStatus(status string)
 }
@@ -195,13 +197,22 @@ func (g *Gateway) runOnce() error {
 	}
 }
 
+// SessionID returns the current gateway session id (set after READY). Empty
+// until the connection is ready. Required to invoke application commands, since
+// the /interactions endpoint expects the live gateway session id.
+func (g *Gateway) SessionID() string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.sessionID
+}
+
 func (g *Gateway) sendIdentify() error {
 	// User-client IDENTIFY: token has no "Bot " prefix, properties mimic the
 	// web client, no intents (users default to all events).
 	identify := map[string]any{
 		"op": opIdentify,
 		"d": map[string]any{
-			"token":   g.token,
+			"token":        g.token,
 			"capabilities": 16381,
 			"properties": map[string]any{
 				"os":                  "Windows",
@@ -391,8 +402,10 @@ func (g *Gateway) handleDispatch(p gatewayPayload) {
 
 	case "PRESENCE_UPDATE":
 		var d struct {
-			User   struct{ ID string `json:"id"` } `json:"user"`
-			Status string                          `json:"status"`
+			User struct {
+				ID string `json:"id"`
+			} `json:"user"`
+			Status string `json:"status"`
 		}
 		if err := json.Unmarshal(p.D, &d); err == nil && d.User.ID != "" {
 			g.handler.OnPresenceUpdate(d.User.ID, d.Status)
@@ -419,8 +432,27 @@ func (g *Gateway) handleDispatch(p gatewayPayload) {
 		if err := json.Unmarshal(p.D, &d); err == nil {
 			g.handler.OnReactionRemove(d.ChannelID, d.MessageID, d.UserID, d.Emoji)
 		}
+
+	case "APPLICATION_COMMAND_AUTOCOMPLETE_RESPONSE":
+		// Bot's autocomplete suggestions for a command we're typing. Correlated
+		// to our request by nonce.
+		var d struct {
+			Nonce   string               `json:"nonce"`
+			Choices []AutocompleteChoice `json:"choices"`
+		}
+		if err := json.Unmarshal(p.D, &d); err == nil {
+			g.handler.OnAutocompleteResponse(d.Nonce, d.Choices)
+		}
+
+	default:
+		if debugDispatch {
+			fmt.Printf("[GW-DISPATCH] t=%s d=%s\n", p.T, string(p.D))
+		}
 	}
 }
+
+// debugDispatch logs unhandled gateway dispatches when FROSTCORD_GW_DEBUG is set.
+var debugDispatch = os.Getenv("FROSTCORD_GW_DEBUG") != ""
 
 // parseMemberListUpdate extracts users from a GUILD_MEMBER_LIST_UPDATE payload.
 // The payload has ops[] each with items[] containing {member:{user}} entries

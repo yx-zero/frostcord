@@ -7,11 +7,15 @@ export function AcceptFriend(arg1:string):Promise<void>;
 
 export function AddReaction(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function Autocomplete(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:number,arg8:Array<main.CommandOptionInput>,arg9:string):Promise<Array<main.AutocompleteChoiceDTO>>;
+
 export function CancelQRLogin():Promise<void>;
 
 export function DeleteMessage(arg1:string,arg2:string):Promise<void>;
 
 export function EditMessage(arg1:string,arg2:string,arg3:string):Promise<main.MessageDTO>;
+
+export function ExecuteCommand(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:number,arg8:Array<main.CommandOptionInput>,arg9:Array<main.CommandAttachmentInput>):Promise<void>;
 
 export function GetChannels(arg1:string):Promise<Array<main.ChannelDTO>>;
 
@@ -36,6 +40,8 @@ export function ListAccounts():Promise<Array<main.AccountDTO>>;
 export function Login(arg1:string):Promise<main.LoginResult>;
 
 export function Logout():Promise<void>;
+
+export function OnAutocompleteResponse(arg1:string,arg2:Array<discord.AutocompleteChoice>):Promise<void>;
 
 export function OnError(arg1:Error):Promise<void>;
 
@@ -74,6 +80,8 @@ export function RemoveFriend(arg1:string):Promise<void>;
 export function RemoveReaction(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function RequestMembers(arg1:string,arg2:string):Promise<void>;
+
+export function SearchCommands(arg1:string,arg2:string,arg3:string):Promise<Array<main.CommandDTO>>;
 
 export function SearchGifs(arg1:string):Promise<Array<main.GifDTO>>;
 

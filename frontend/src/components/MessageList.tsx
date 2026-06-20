@@ -118,12 +118,16 @@ export function MessageList({ messages, typing }: Props) {
       !prev ||
       prev.author.id !== msg.author.id ||
       dayKey(prev.timestamp) !== dk ||
-      !shouldGroup(prev.timestamp, msg.timestamp)
+      !shouldGroup(prev.timestamp, msg.timestamp) ||
+      // A slash-command reply always starts its own group so the
+      // "X used /command" header + avatar are shown.
+      !!msg.interaction
     const groupEnd =
       !next ||
       next.author.id !== msg.author.id ||
       dayKey(next.timestamp) !== dk ||
-      !shouldGroup(msg.timestamp, next.timestamp)
+      !shouldGroup(msg.timestamp, next.timestamp) ||
+      !!next.interaction
 
     items.push(
       <MessageBubble

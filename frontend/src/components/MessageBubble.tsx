@@ -167,6 +167,27 @@ export function MessageBubble({ message, groupStart, groupEnd, highlighted, onJu
           mine ? 'items-end' : 'items-start'
         }`}
       >
+        {/* "X used /command" header on a bot's slash-command reply */}
+        {message.interaction && (
+          <div
+            className={`mb-0.5 ml-1 flex items-center gap-1 text-[0.7rem] ${
+              mine ? 'flex-row-reverse' : ''
+            }`}
+            style={{ color: 'rgb(var(--c-subtext))' }}
+          >
+            <span>{message.interaction.userName} used</span>
+            <span
+              className="rounded px-1 font-semibold"
+              style={{
+                background: 'rgb(var(--c-accent) / 0.15)',
+                color: 'rgb(var(--c-accent2))',
+              }}
+            >
+              /{message.interaction.name}
+            </span>
+          </div>
+        )}
+
         {/* Author name for others, only at group start */}
         {!mine && groupStart && (
           <button
@@ -263,8 +284,10 @@ export function MessageBubble({ message, groupStart, groupEnd, highlighted, onJu
             </div>
           )}
 
-          {/* Media-only meta row (time/status) since there's no text line */}
-          {mediaOnly && (
+          {/* Media-only meta row (time/status) since there's no text line.
+              Suppressed when bot buttons exist — the meta then renders after the
+              buttons (below) so it doesn't sit between the embed and buttons. */}
+          {mediaOnly && !(message.buttons && message.buttons.length > 0) && (
             <div
               className={`flex items-center gap-1 px-1 pt-0.5 text-[0.65rem] ${
                 mine ? 'justify-end' : ''
@@ -325,6 +348,27 @@ export function MessageBubble({ message, groupStart, groupEnd, highlighted, onJu
                 </button>
               )
             })}
+          </div>
+        )}
+
+        {/* Media-only meta row, placed after bot buttons so the time/status sits
+            below the buttons (matching the official client) rather than between
+            the embed and the buttons. */}
+        {mediaOnly && message.buttons && message.buttons.length > 0 && (
+          <div
+            className={`mt-1 flex items-center gap-1 px-1 text-[0.65rem] ${
+              mine ? 'justify-end' : ''
+            }`}
+            style={{ color: 'rgb(var(--c-subtext))' }}
+          >
+            {formatTime(message.timestamp)}
+            {mine && (
+              <MessageStatusIndicator
+                status={message.status}
+                tone="onSurface"
+                onRetry={() => retryMessage(message.id)}
+              />
+            )}
           </div>
         )}
 

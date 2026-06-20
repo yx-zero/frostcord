@@ -103,24 +103,34 @@ type MessageReference struct {
 }
 
 type Message struct {
-	ID                string            `json:"id"`
-	ChannelID         string            `json:"channel_id"`
-	GuildID           string            `json:"guild_id"`
-	Author            User              `json:"author"`
-	Content           string            `json:"content"`
-	Timestamp         string            `json:"timestamp"`
-	EditedTimestamp   string            `json:"edited_timestamp"`
-	Attachments       []Attachment      `json:"attachments"`
-	Embeds            []Embed           `json:"embeds"`
-	Reactions         []Reaction        `json:"reactions"`
-	Mentions          []User            `json:"mentions"`
-	MentionRoles      []string          `json:"mention_roles"`
-	Nonce             string            `json:"nonce"`
-	Type              int               `json:"type"`
-	MessageReference  *MessageReference `json:"message_reference"`
-	ReferencedMessage *Message          `json:"referenced_message"`
-	Components        []Component       `json:"components"`
-	Poll              *Poll             `json:"poll"`
+	ID                string              `json:"id"`
+	ChannelID         string              `json:"channel_id"`
+	GuildID           string              `json:"guild_id"`
+	Author            User                `json:"author"`
+	Content           string              `json:"content"`
+	Timestamp         string              `json:"timestamp"`
+	EditedTimestamp   string              `json:"edited_timestamp"`
+	Attachments       []Attachment        `json:"attachments"`
+	Embeds            []Embed             `json:"embeds"`
+	Reactions         []Reaction          `json:"reactions"`
+	Mentions          []User              `json:"mentions"`
+	MentionRoles      []string            `json:"mention_roles"`
+	Nonce             string              `json:"nonce"`
+	Type              int                 `json:"type"`
+	MessageReference  *MessageReference   `json:"message_reference"`
+	ReferencedMessage *Message            `json:"referenced_message"`
+	Components        []Component         `json:"components"`
+	Poll              *Poll               `json:"poll"`
+	Interaction       *MessageInteraction `json:"interaction"`
+}
+
+// MessageInteraction describes the slash-command invocation a message is
+// responding to (legacy field; reliably carries the command name + user).
+type MessageInteraction struct {
+	ID   string `json:"id"`
+	Type int    `json:"type"`
+	Name string `json:"name"`
+	User User   `json:"user"`
 }
 
 // Component covers message action rows + buttons + select menus (bot UI).
@@ -163,8 +173,8 @@ type PollAnswerCount struct {
 }
 
 type PollAnswer struct {
-	AnswerID  int            `json:"answer_id"`
-	PollMedia PollMedia      `json:"poll_media"`
+	AnswerID  int       `json:"answer_id"`
+	PollMedia PollMedia `json:"poll_media"`
 }
 
 type PollMedia struct {
@@ -338,4 +348,86 @@ func (p UserProfile) AvatarURL() string {
 		ext = "gif"
 	}
 	return "https://cdn.discordapp.com/avatars/" + p.User.ID + "/" + p.User.Avatar + "." + ext + "?size=240"
+}
+
+// ---- Application (slash) commands -----------------------------------------
+
+// Application command types.
+const (
+	CmdTypeChatInput = 1 // slash command
+	CmdTypeUser      = 2 // user context-menu
+	CmdTypeMessage   = 3 // message context-menu
+)
+
+// Application command option types per Discord's API.
+const (
+	CmdOptSubCommand      = 1
+	CmdOptSubCommandGroup = 2
+	CmdOptString          = 3
+	CmdOptInteger         = 4
+	CmdOptBoolean         = 5
+	CmdOptUser            = 6
+	CmdOptChannel         = 7
+	CmdOptRole            = 8
+	CmdOptMentionable     = 9
+	CmdOptNumber          = 10
+	CmdOptAttachment      = 11
+)
+
+// CommandOptionChoice is a predefined value for an option.
+type CommandOptionChoice struct {
+	Name  string `json:"name"`
+	Value any    `json:"value"`
+}
+
+// CommandOption describes one option (or sub-command) of an application command.
+type CommandOption struct {
+	Type         int                   `json:"type"`
+	Name         string                `json:"name"`
+	Description  string                `json:"description"`
+	Required     bool                  `json:"required"`
+	Autocomplete bool                  `json:"autocomplete"`
+	Choices      []CommandOptionChoice `json:"choices"`
+	Options      []CommandOption       `json:"options"` // for sub-commands/groups
+}
+
+// ApplicationCommand is a bot's slash command, as returned by the search endpoint.
+type ApplicationCommand struct {
+	ID            string          `json:"id"`
+	ApplicationID string          `json:"application_id"`
+	Version       string          `json:"version"`
+	Type          int             `json:"type"`
+	Name          string          `json:"name"`
+	Description   string          `json:"description"`
+	Options       []CommandOption `json:"options"`
+}
+
+// CommandApplication is a bot/app entry in the search response.
+type CommandApplication struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Icon string `json:"icon"`
+	Bot  *User  `json:"bot"`
+}
+
+// IconURL builds the CDN url for an application icon (or empty).
+func (a CommandApplication) IconURL() string {
+	if a.Icon == "" {
+		return ""
+	}
+	return "https://cdn.discordapp.com/app-icons/" + a.ID + "/" + a.Icon + ".png?size=64"
+}
+
+// CommandSearchResult is the response of the application-commands/search endpoint.
+type CommandSearchResult struct {
+	Commands     []ApplicationCommand `json:"application_commands"`
+	Applications []CommandApplication `json:"applications"`
+}
+
+// InteractionOption is a resolved option value sent when invoking a command.
+type InteractionOption struct {
+	Type    int                 `json:"type"`
+	Name    string              `json:"name"`
+	Value   any                 `json:"value,omitempty"`
+	Options []InteractionOption `json:"options,omitempty"` // for sub-commands/groups
 }

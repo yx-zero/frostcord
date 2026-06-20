@@ -43,6 +43,11 @@ interface ChatState {
   loadChannelMessages: (channelId: string) => Promise<void>
   setActiveChannel: (id: string) => void
   sendMessage: (content: string, attachments?: Attachment[]) => void
+  executeCommand: (
+    cmd: import('../services/discord').SlashCommand,
+    options: import('../services/discord').CommandOptionInput[],
+    attachments?: import('../services/discord').CommandAttachmentInput[],
+  ) => Promise<void>
   sendAttachment: (attachment: Attachment) => void
   sendFiles: (
     files: { filename: string; data: string; type: string; previewUrl: string }[],
@@ -435,6 +440,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } else {
       simulateSend(nonce, channelId, set)
     }
+  },
+
+  executeCommand: async (cmd, options, attachments = []) => {
+    const channelId = get().activeChannelId
+    if (!channelId || !get().live) return
+    const serverId = get().activeServerId
+    await api.executeCommand(
+      serverId === '@me' ? '' : serverId,
+      channelId,
+      cmd,
+      options,
+      attachments,
+    )
+    // The bot's response arrives via the gateway (MESSAGE_CREATE); nothing to
+    // render optimistically since the invocation itself isn't a user message.
   },
 
   sendAttachment: (attachment) => {

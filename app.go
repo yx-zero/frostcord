@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"frostcord/internal/discord"
 
@@ -26,10 +27,17 @@ type App struct {
 
 	// QR (remote-auth) login.
 	remoteAuth *discord.RemoteAuth
+
+	// Autocomplete waiters: nonce -> channel awaiting the gateway response.
+	acMu      sync.Mutex
+	acWaiters map[string]chan []discord.AutocompleteChoice
 }
 
 func NewApp() *App {
-	return &App{store: newAccountStore()}
+	return &App{
+		store:     newAccountStore(),
+		acWaiters: make(map[string]chan []discord.AutocompleteChoice),
+	}
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -154,8 +162,17 @@ type MessageDTO struct {
 	Buttons     []ButtonDTO     `json:"buttons"`
 	Poll        *PollDTO        `json:"poll"`
 	Reply       *ReplyDTO       `json:"replyTo"`
+	// Interaction is set when this message is a bot's reply to a slash command:
+	// who used which command (for the "X used /command" header).
+	Interaction *InteractionDTO `json:"interaction"`
 	// Mentions maps user id -> display name so the UI can render <@id> nicely.
 	Mentions map[string]string `json:"mentions"`
+}
+
+// InteractionDTO carries the slash-command invocation a bot reply responds to.
+type InteractionDTO struct {
+	Name     string `json:"name"`     // command name, e.g. "stock"
+	UserName string `json:"userName"` // invoking user's display name
 }
 
 type GifDTO struct {
@@ -406,6 +423,14 @@ func (a *App) toMessageDTO(m *discord.Message) MessageDTO {
 		poll = p
 	}
 
+	var interaction *InteractionDTO
+	if m.Interaction != nil {
+		interaction = &InteractionDTO{
+			Name:     m.Interaction.Name,
+			UserName: m.Interaction.User.DisplayName(),
+		}
+	}
+
 	return MessageDTO{
 		ID:          m.ID,
 		ChannelID:   m.ChannelID,
@@ -422,6 +447,7 @@ func (a *App) toMessageDTO(m *discord.Message) MessageDTO {
 		Buttons:     buttons,
 		Poll:        poll,
 		Reply:       reply,
+		Interaction: interaction,
 		Mentions:    mentions,
 	}
 }
@@ -529,10 +555,11 @@ func (a *App) finishTokenLogin(token string) error {
 }
 
 // StartQRLogin begins the QR remote-auth flow. Emits events:
-//   cd:qr        -> { url }            (encode as QR for the phone to scan)
-//   cd:qrUser    -> { id, username, ... } (user scanned, preview)
-//   cd:qrToken   -> handled internally: logs in + emits cd:ready via gateway
-//   cd:qrError   -> { error }
+//
+//	cd:qr        -> { url }            (encode as QR for the phone to scan)
+//	cd:qrUser    -> { id, username, ... } (user scanned, preview)
+//	cd:qrToken   -> handled internally: logs in + emits cd:ready via gateway
+//	cd:qrError   -> { error }
 func (a *App) StartQRLogin() {
 	a.mu.Lock()
 	if a.remoteAuth != nil {
@@ -898,9 +925,9 @@ func (a *App) VotePoll(channelID, messageID string, answerIDs []int) error {
 
 // FriendDTO is a relationship entry for the friends list.
 type FriendDTO struct {
-	ID       string  `json:"id"`
-	Type     int     `json:"type"` // 1=friend, 3=incoming, 4=outgoing, 2=blocked
-	User     UserDTO `json:"user"`
+	ID   string  `json:"id"`
+	Type int     `json:"type"` // 1=friend, 3=incoming, 4=outgoing, 2=blocked
+	User UserDTO `json:"user"`
 }
 
 // GetFriends lists the user's relationships (friends / pending / blocked).
@@ -1157,6 +1184,353 @@ func (a *App) SendFiles(channelID, content, nonce string, files []UploadFileInpu
 	return a.toMessageDTO(m), nil
 }
 
+// ---- Slash (application) commands -----------------------------------------
+
+// CommandOptionDTO is a slash-command option/sub-command shaped for the UI.
+type CommandOptionDTO struct {
+	Type         int                `json:"type"`
+	Name         string             `json:"name"`
+	Description  string             `json:"description"`
+	Required     bool               `json:"required"`
+	Autocomplete bool               `json:"autocomplete"`
+	Choices      []CommandChoiceDTO `json:"choices"`
+	Options      []CommandOptionDTO `json:"options"`
+}
+
+// CommandChoiceDTO is a predefined choice for an option (value stringified).
+type CommandChoiceDTO struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// CommandDTO is a bot slash command shaped for the UI picker.
+type CommandDTO struct {
+	ID          string             `json:"id"`
+	AppID       string             `json:"appId"`
+	Version     string             `json:"version"`
+	Type        int                `json:"type"`
+	Name        string             `json:"name"`
+	Description string             `json:"description"`
+	BotName     string             `json:"botName"`
+	BotIconURL  string             `json:"botIconUrl"`
+	Options     []CommandOptionDTO `json:"options"`
+}
+
+// CommandOptionInput is one filled-in option value sent from the frontend.
+// Value is a string; the backend coerces it to the option's real type.
+type CommandOptionInput struct {
+	Type    int                  `json:"type"`
+	Name    string               `json:"name"`
+	Value   string               `json:"value"`
+	Options []CommandOptionInput `json:"options"`
+}
+
+// CommandAttachmentInput is a file chosen for a slash command's attachment
+// option: which option it's for, plus the filename and base64 data.
+type CommandAttachmentInput struct {
+	OptionName string `json:"optionName"`
+	Filename   string `json:"filename"`
+	Data       string `json:"data"` // base64 (may include a data: URL prefix)
+}
+
+func toCommandOptionDTO(o discord.CommandOption) CommandOptionDTO {
+	choices := make([]CommandChoiceDTO, 0, len(o.Choices))
+	for _, c := range o.Choices {
+		choices = append(choices, CommandChoiceDTO{
+			Name:  c.Name,
+			Value: fmt.Sprintf("%v", c.Value),
+		})
+	}
+	subs := make([]CommandOptionDTO, 0, len(o.Options))
+	for _, s := range o.Options {
+		subs = append(subs, toCommandOptionDTO(s))
+	}
+	return CommandOptionDTO{
+		Type: o.Type, Name: o.Name, Description: o.Description,
+		Required: o.Required, Autocomplete: o.Autocomplete,
+		Choices: choices, Options: subs,
+	}
+}
+
+// SearchCommands lists a channel's available slash commands (optionally filtered
+// by query). Each command carries its owning bot's name/icon for the picker.
+func (a *App) SearchCommands(guildID, channelID, query string) ([]CommandDTO, error) {
+	a.mu.Lock()
+	rest := a.rest
+	a.mu.Unlock()
+	if rest == nil {
+		return nil, nil
+	}
+	res, err := rest.SearchCommands(guildID, channelID, query)
+	if err != nil {
+		return nil, err
+	}
+	// Map application id -> name/icon for display.
+	appByID := make(map[string]discord.CommandApplication, len(res.Applications))
+	for _, ap := range res.Applications {
+		appByID[ap.ID] = ap
+	}
+	out := make([]CommandDTO, 0, len(res.Commands))
+	for _, c := range res.Commands {
+		opts := make([]CommandOptionDTO, 0, len(c.Options))
+		for _, o := range c.Options {
+			opts = append(opts, toCommandOptionDTO(o))
+		}
+		dto := CommandDTO{
+			ID: c.ID, AppID: c.ApplicationID, Version: c.Version,
+			Type: c.Type, Name: c.Name, Description: c.Description,
+			Options: opts,
+		}
+		if ap, ok := appByID[c.ApplicationID]; ok {
+			dto.BotName = ap.Name
+			dto.BotIconURL = ap.IconURL()
+		}
+		out = append(out, dto)
+	}
+	return out, nil
+}
+
+// coerceOptionValue converts a string input to the JSON type Discord expects for
+// the given option type (numbers/booleans must not be sent as strings).
+func coerceOptionValue(optType int, raw string) any {
+	switch optType {
+	case discord.CmdOptInteger:
+		var n int64
+		if _, err := fmt.Sscanf(raw, "%d", &n); err == nil {
+			return n
+		}
+		return raw
+	case discord.CmdOptNumber:
+		var f float64
+		if _, err := fmt.Sscanf(raw, "%g", &f); err == nil {
+			return f
+		}
+		return raw
+	case discord.CmdOptBoolean:
+		return raw == "true" || raw == "1"
+	default:
+		return raw
+	}
+}
+
+// buildInteractionOptions converts frontend inputs into Discord interaction
+// options, recursing into sub-commands/groups. Empty leaf values are dropped.
+// attIndex maps an attachment option's name to its uploaded attachment index,
+// which becomes that option's value.
+func buildInteractionOptions(
+	inputs []CommandOptionInput,
+	attIndex map[string]string,
+) []discord.InteractionOption {
+	out := make([]discord.InteractionOption, 0, len(inputs))
+	for _, in := range inputs {
+		if in.Type == discord.CmdOptSubCommand || in.Type == discord.CmdOptSubCommandGroup {
+			out = append(out, discord.InteractionOption{
+				Type:    in.Type,
+				Name:    in.Name,
+				Options: buildInteractionOptions(in.Options, attIndex),
+			})
+			continue
+		}
+		// Attachment options carry their value as the uploaded attachment index.
+		if in.Type == discord.CmdOptAttachment {
+			idx, ok := attIndex[in.Name]
+			if !ok {
+				continue // no file provided for this attachment option
+			}
+			out = append(out, discord.InteractionOption{
+				Type: in.Type, Name: in.Name, Value: idx,
+			})
+			continue
+		}
+		if in.Value == "" {
+			continue // skip unfilled optional values
+		}
+		out = append(out, discord.InteractionOption{
+			Type:  in.Type,
+			Name:  in.Name,
+			Value: coerceOptionValue(in.Type, in.Value),
+		})
+	}
+	return out
+}
+
+// ExecuteCommand invokes a slash command via the /interactions endpoint. The
+// command id/version come from the frontend (sourced from SearchCommands); the
+// session id is pulled live from the gateway. attachments are files for any
+// attachment options, uploaded first and referenced by index. The bot's reply
+// arrives over the gateway as a normal message.
+func (a *App) ExecuteCommand(
+	guildID, channelID, commandID, appID, version, name string,
+	cmdType int,
+	options []CommandOptionInput,
+	attachments []CommandAttachmentInput,
+) error {
+	a.mu.Lock()
+	rest := a.rest
+	gw := a.gateway
+	a.mu.Unlock()
+	if rest == nil {
+		return fmt.Errorf("not connected")
+	}
+	sessionID := ""
+	if gw != nil {
+		sessionID = gw.SessionID()
+	}
+	if sessionID == "" {
+		return fmt.Errorf("gateway not ready")
+	}
+
+	// Upload any attachment-option files first, then map option name -> index so
+	// the matching option's value points at the uploaded attachment.
+	var atts []discord.InteractionAttachment
+	attIndexByOption := map[string]string{}
+	if len(attachments) > 0 {
+		uploads := make([]discord.UploadFile, 0, len(attachments))
+		for _, at := range attachments {
+			raw, err := decodeBase64Data(at.Data)
+			if err != nil {
+				return fmt.Errorf("decode %s: %w", at.Filename, err)
+			}
+			fname := at.Filename
+			if fname == "" {
+				fname = "file"
+			}
+			uploads = append(uploads, discord.UploadFile{Filename: fname, Data: raw})
+		}
+		var err error
+		atts, err = rest.UploadCommandAttachments(channelID, uploads)
+		if err != nil {
+			return err
+		}
+		// uploads and attachments line up by order; atts[i].ID is the index.
+		for i, at := range attachments {
+			if i < len(atts) {
+				attIndexByOption[at.OptionName] = atts[i].ID
+			}
+		}
+	}
+
+	cmd := discord.ApplicationCommand{
+		ID: commandID, ApplicationID: appID, Version: version,
+		Type: cmdType, Name: name,
+	}
+	nonce := generateNonce()
+	return rest.ExecuteCommand(
+		guildID, channelID, sessionID, nonce, cmd,
+		buildInteractionOptions(options, attIndexByOption),
+		atts,
+	)
+}
+
+// decodeBase64Data decodes a base64 string, stripping a data: URL prefix.
+func decodeBase64Data(b64 string) ([]byte, error) {
+	if i := strings.Index(b64, ","); strings.HasPrefix(b64, "data:") && i >= 0 {
+		b64 = b64[i+1:]
+	}
+	return base64.StdEncoding.DecodeString(b64)
+}
+
+// AutocompleteChoiceDTO is one suggestion for an autocomplete option.
+type AutocompleteChoiceDTO struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// Autocomplete fetches a bot's live suggestions for the focused option of a
+// slash command. options carry the current (partial) values; focusedName is the
+// option being typed. The request is fire-and-forget over HTTP; the bot's
+// choices arrive over the gateway, correlated by nonce. We register a waiter,
+// fire the request, and block (briefly) for the gateway response.
+func (a *App) Autocomplete(
+	guildID, channelID, commandID, appID, version, name string,
+	cmdType int,
+	options []CommandOptionInput,
+	focusedName string,
+) ([]AutocompleteChoiceDTO, error) {
+	a.mu.Lock()
+	rest := a.rest
+	gw := a.gateway
+	a.mu.Unlock()
+	if rest == nil {
+		return nil, fmt.Errorf("not connected")
+	}
+	sessionID := ""
+	if gw != nil {
+		sessionID = gw.SessionID()
+	}
+	if sessionID == "" {
+		return nil, fmt.Errorf("gateway not ready")
+	}
+	cmd := discord.ApplicationCommand{
+		ID: commandID, ApplicationID: appID, Version: version,
+		Type: cmdType, Name: name,
+	}
+	opts := buildAutocompleteOptions(options)
+
+	// Register a waiter for this nonce before firing the request, so we don't
+	// race the gateway response.
+	nonce := generateNonce()
+	ch := make(chan []discord.AutocompleteChoice, 1)
+	a.acMu.Lock()
+	a.acWaiters[nonce] = ch
+	a.acMu.Unlock()
+	defer func() {
+		a.acMu.Lock()
+		delete(a.acWaiters, nonce)
+		a.acMu.Unlock()
+	}()
+
+	if err := rest.Autocomplete(guildID, channelID, sessionID, nonce, cmd, opts, focusedName); err != nil {
+		return nil, err
+	}
+
+	// Wait for the gateway dispatch (or time out — some bots are slow/silent).
+	select {
+	case choices := <-ch:
+		out := make([]AutocompleteChoiceDTO, 0, len(choices))
+		for _, c := range choices {
+			out = append(out, AutocompleteChoiceDTO{
+				Name:  c.Name,
+				Value: fmt.Sprintf("%v", c.Value),
+			})
+		}
+		return out, nil
+	case <-time.After(3 * time.Second):
+		return nil, nil // no response in time; treat as no suggestions
+	}
+}
+
+// buildAutocompleteOptions is like buildInteractionOptions but keeps options
+// with empty values (the focused option may be empty/partial) and ignores
+// attachments (not relevant to autocomplete).
+func buildAutocompleteOptions(inputs []CommandOptionInput) []discord.InteractionOption {
+	out := make([]discord.InteractionOption, 0, len(inputs))
+	for _, in := range inputs {
+		if in.Type == discord.CmdOptSubCommand || in.Type == discord.CmdOptSubCommandGroup {
+			out = append(out, discord.InteractionOption{
+				Type:    in.Type,
+				Name:    in.Name,
+				Options: buildAutocompleteOptions(in.Options),
+			})
+			continue
+		}
+		opt := discord.InteractionOption{Type: in.Type, Name: in.Name}
+		if in.Value != "" {
+			opt.Value = coerceOptionValue(in.Type, in.Value)
+		}
+		out = append(out, opt)
+	}
+	return out
+}
+
+// generateNonce builds a Discord snowflake-like nonce from the current time.
+// (Discord only requires uniqueness for dedup; exact epoch math isn't critical.)
+func generateNonce() string {
+	const discordEpoch = 1420070400000
+	ms := time.Now().UnixMilli() - discordEpoch
+	return fmt.Sprintf("%d", ms<<22)
+}
+
 func (a *App) SearchGifs(query string) ([]GifDTO, error) {
 	a.mu.Lock()
 	rest := a.rest
@@ -1320,4 +1694,18 @@ func (a *App) OnError(err error) {
 
 func (a *App) OnStatus(status string) {
 	a.emit("cd:status", status)
+}
+
+// OnAutocompleteResponse delivers a bot's autocomplete choices to the waiter
+// registered for the request's nonce (see Autocomplete).
+func (a *App) OnAutocompleteResponse(nonce string, choices []discord.AutocompleteChoice) {
+	a.acMu.Lock()
+	ch := a.acWaiters[nonce]
+	a.acMu.Unlock()
+	if ch != nil {
+		select {
+		case ch <- choices:
+		default:
+		}
+	}
 }

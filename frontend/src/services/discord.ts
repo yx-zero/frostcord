@@ -27,6 +27,9 @@ import {
   RequestMembers as goRequestMembers,
   GetUserProfile as goGetUserProfile,
   SearchGifs as goSearchGifs,
+  SearchCommands as goSearchCommands,
+  ExecuteCommand as goExecuteCommand,
+  Autocomplete as goAutocomplete,
 } from '../../wailsjs/go/main/App'
 import { EventsOn } from '../../wailsjs/runtime/runtime'
 import {
@@ -141,7 +144,45 @@ interface MessageDTO {
   buttons: ButtonDTO[] | null
   poll: PollDTO | null
   replyTo: { id: string; authorName: string; preview: string } | null
+  interaction: { name: string; userName: string } | null
   mentions: Record<string, string> | null
+}
+
+// ---- slash command shapes -------------------------------------------------
+export interface CommandChoice {
+  name: string
+  value: string
+}
+export interface CommandOption {
+  type: number
+  name: string
+  description: string
+  required: boolean
+  autocomplete: boolean
+  choices: CommandChoice[] | null
+  options: CommandOption[] | null
+}
+export interface SlashCommand {
+  id: string
+  appId: string
+  version: string
+  type: number
+  name: string
+  description: string
+  botName: string
+  botIconUrl: string
+  options: CommandOption[] | null
+}
+export interface CommandOptionInput {
+  type: number
+  name: string
+  value?: string
+  options?: CommandOptionInput[]
+}
+export interface CommandAttachmentInput {
+  optionName: string
+  filename: string
+  data: string
 }
 
 // ---- mappers --------------------------------------------------------------
@@ -254,6 +295,9 @@ export function mapMessage(m: MessageDTO): Message {
           authorName: m.replyTo.authorName,
           preview: m.replyTo.preview,
         }
+      : undefined,
+    interaction: m.interaction
+      ? { name: m.interaction.name, userName: m.interaction.userName }
       : undefined,
     nonce: m.nonce || undefined,
   }
@@ -418,6 +462,56 @@ export const api = {
   ): Promise<Message> {
     const m = (await goSendFiles(channelId, content, nonce, files)) as MessageDTO
     return mapMessage(m)
+  },
+
+  async searchCommands(
+    guildId: string,
+    channelId: string,
+    query: string,
+  ): Promise<SlashCommand[]> {
+    const cs = (await goSearchCommands(guildId, channelId, query)) as SlashCommand[]
+    return cs ?? []
+  },
+
+  executeCommand(
+    guildId: string,
+    channelId: string,
+    cmd: SlashCommand,
+    options: CommandOptionInput[],
+    attachments: CommandAttachmentInput[] = [],
+  ): Promise<void> {
+    return goExecuteCommand(
+      guildId,
+      channelId,
+      cmd.id,
+      cmd.appId,
+      cmd.version,
+      cmd.name,
+      cmd.type,
+      options as never,
+      attachments as never,
+    )
+  },
+
+  async autocomplete(
+    guildId: string,
+    channelId: string,
+    cmd: SlashCommand,
+    options: CommandOptionInput[],
+    focusedName: string,
+  ): Promise<{ name: string; value: string }[]> {
+    const cs = (await goAutocomplete(
+      guildId,
+      channelId,
+      cmd.id,
+      cmd.appId,
+      cmd.version,
+      cmd.name,
+      cmd.type,
+      options as never,
+      focusedName,
+    )) as { name: string; value: string }[]
+    return cs ?? []
   },
 
   async searchGifs(query: string): Promise<Gif[]> {

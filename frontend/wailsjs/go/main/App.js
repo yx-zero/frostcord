@@ -10,6 +10,10 @@ export function AddReaction(arg1, arg2, arg3) {
   return window['go']['main']['App']['AddReaction'](arg1, arg2, arg3);
 }
 
+export function Autocomplete(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) {
+  return window['go']['main']['App']['Autocomplete'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
+}
+
 export function CancelQRLogin() {
   return window['go']['main']['App']['CancelQRLogin']();
 }
@@ -20,6 +24,10 @@ export function DeleteMessage(arg1, arg2) {
 
 export function EditMessage(arg1, arg2, arg3) {
   return window['go']['main']['App']['EditMessage'](arg1, arg2, arg3);
+}
+
+export function ExecuteCommand(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) {
+  return window['go']['main']['App']['ExecuteCommand'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
 }
 
 export function GetChannels(arg1) {
@@ -68,6 +76,10 @@ export function Login(arg1) {
 
 export function Logout() {
   return window['go']['main']['App']['Logout']();
+}
+
+export function OnAutocompleteResponse(arg1, arg2) {
+  return window['go']['main']['App']['OnAutocompleteResponse'](arg1, arg2);
 }
 
 export function OnError(arg1) {
@@ -144,6 +156,10 @@ export function RemoveReaction(arg1, arg2, arg3) {
 
 export function RequestMembers(arg1, arg2) {
   return window['go']['main']['App']['RequestMembers'](arg1, arg2);
+}
+
+export function SearchCommands(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SearchCommands'](arg1, arg2, arg3);
 }
 
 export function SearchGifs(arg1) {

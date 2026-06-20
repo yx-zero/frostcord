@@ -105,6 +105,11 @@ export interface Message {
     authorName: string
     preview: string
   }
+  /** set on a bot's reply to a slash command: who used which command */
+  interaction?: {
+    name: string
+    userName: string
+  }
   /** transient client id used to reconcile optimistic -> real */
   nonce?: string
 }
