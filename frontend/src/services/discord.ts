@@ -8,6 +8,8 @@ import {
   RemoveAccount as goRemoveAccount,
   Logout as goLogout,
   GetGuilds,
+  GetGuildFolders,
+  GetRoles,
   GetChannels,
   GetDMChannels,
   GetMessages,
@@ -38,7 +40,9 @@ import {
   Gif,
   Message,
   MessageStatus,
+  Role,
   Server,
+  ServerFolder,
   User,
   UserProfile,
 } from '../types'
@@ -57,6 +61,17 @@ interface GuildDTO {
   name: string
   iconUrl: string
   acronym: string
+}
+interface RoleDTO {
+  id: string
+  name: string
+  color: string
+}
+interface ServerFolderDTO {
+  id: string
+  name: string
+  color: string
+  guildIds: string[]
 }
 interface ChannelDTO {
   id: string
@@ -359,6 +374,36 @@ export const api = {
   async getServers(): Promise<Server[]> {
     const gs = (await GetGuilds()) as GuildDTO[]
     return (gs ?? []).map(mapServer)
+  },
+
+  async getServerFolders(): Promise<ServerFolder[]> {
+    const fs = (await GetGuildFolders()) as ServerFolderDTO[]
+    return (fs ?? []).map((f) => ({
+      id: f.id,
+      name: f.name,
+      color: f.color || undefined,
+      guildIds: f.guildIds ?? [],
+    }))
+  },
+
+  async getRoles(serverId: string): Promise<Role[]> {
+    if (!serverId || serverId === '@me') return []
+    const rs = (await GetRoles(serverId)) as RoleDTO[]
+    const roles: Role[] = (rs ?? []).map((r) => ({
+      id: r.id,
+      name: r.name,
+      color: r.color || undefined,
+    }))
+    // Feed the mention registry so <@&id> renders as @name in its color.
+    const names: Record<string, string> = {}
+    const colors: Record<string, string> = {}
+    for (const r of roles) {
+      names[r.id] = r.name
+      if (r.color) colors[r.id] = r.color
+    }
+    useMentionStore.getState().addRoles(names)
+    useMentionStore.getState().addRoleColors(colors)
+    return roles
   },
 
   async getChannels(serverId: string): Promise<Channel[]> {

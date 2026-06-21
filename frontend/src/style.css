@@ -52,10 +52,10 @@ body {
   inset: 0;
   z-index: -1;
   background:
-    radial-gradient(circle at 12% 18%, rgb(var(--c-accent) / 0.28), transparent 42%),
-    radial-gradient(circle at 88% 12%, rgb(var(--c-accent2) / 0.22), transparent 40%),
-    radial-gradient(circle at 78% 88%, rgb(var(--c-accent) / 0.18), transparent 45%),
-    radial-gradient(circle at 20% 92%, rgb(var(--c-accent2) / 0.16), transparent 48%),
+    radial-gradient(circle at 12% 18%, rgb(var(--c-accent) / 0.10), transparent 42%),
+    radial-gradient(circle at 88% 12%, rgb(var(--c-accent2) / 0.08), transparent 40%),
+    radial-gradient(circle at 78% 88%, rgb(var(--c-accent) / 0.07), transparent 45%),
+    radial-gradient(circle at 20% 92%, rgb(var(--c-accent2) / 0.06), transparent 48%),
     rgb(var(--c-base));
   transition: background 0.5s ease;
 }
@@ -66,8 +66,8 @@ body {
   position: absolute;
   inset: -20%;
   background:
-    radial-gradient(circle at 30% 40%, rgb(var(--c-accent) / 0.12), transparent 35%),
-    radial-gradient(circle at 70% 60%, rgb(var(--c-accent2) / 0.12), transparent 35%);
+    radial-gradient(circle at 30% 40%, rgb(var(--c-accent) / 0.05), transparent 35%),
+    radial-gradient(circle at 70% 60%, rgb(var(--c-accent2) / 0.05), transparent 35%);
   animation: wallpaper-drift 28s ease-in-out infinite alternate;
   will-change: transform;
 }

@@ -59,6 +59,23 @@ export function replaceShortcodes(text: string): string {
   })
 }
 
+/** The full emoji catalog (one entry per unicode emoji), for the picker. */
+export const ALL_EMOJI: EmojiEntry[] = entries
+
+/** Filter the full catalog by shortcode + label (no limit). Empty -> all. */
+export function filterEmoji(query: string): EmojiEntry[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return entries
+  const starts: EmojiEntry[] = []
+  const includes: EmojiEntry[] = []
+  for (const e of entries) {
+    if (e.shortcode.startsWith(q)) starts.push(e)
+    else if (e.shortcode.includes(q) || e.label.toLowerCase().includes(q))
+      includes.push(e)
+  }
+  return [...starts, ...includes]
+}
+
 /** Search emoji by shortcode/label for the autocomplete (max `limit`). */
 export function searchEmoji(query: string, limit = 8): EmojiEntry[] {
   const q = query.toLowerCase()

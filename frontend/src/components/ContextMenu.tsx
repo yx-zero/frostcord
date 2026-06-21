@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Glass } from './Glass'
+import { IconPlus } from './icons'
+import { twemojiURL } from '../utils/emoji'
 
 export interface MenuItem {
   label: string
@@ -11,6 +13,8 @@ export interface MenuItem {
   divider?: boolean
   /** when set, renders a row of quick-reaction emoji buttons instead of a label */
   quickReactions?: { emoji: string; onClick: () => void }[]
+  /** when set with quickReactions, adds a "+" button that opens the full picker */
+  onMore?: () => void
   /** disable + grey out (for not-yet-implemented actions) */
   disabled?: boolean
   /** small text badge on the right (e.g. "ID") */
@@ -89,11 +93,29 @@ export function ContextMenu({ open, pos, items, onClose }: Props) {
                           qr.onClick()
                           onClose()
                         }}
-                        className="no-drag flex h-8 w-8 items-center justify-center rounded-md text-lg transition hover:bg-surface1"
+                        title={qr.emoji}
+                        className="no-drag flex h-8 w-8 items-center justify-center rounded-md transition hover:scale-110 hover:bg-surface1"
                       >
-                        {qr.emoji}
+                        <img
+                          src={twemojiURL(qr.emoji)}
+                          alt={qr.emoji}
+                          className="h-5 w-5"
+                          draggable={false}
+                        />
                       </button>
                     ))}
+                    {item.onMore && (
+                      <button
+                        onClick={() => {
+                          item.onMore!()
+                          onClose()
+                        }}
+                        title="More emoji"
+                        className="no-drag flex h-8 w-8 items-center justify-center rounded-md text-muted transition hover:bg-surface1 hover:text-text"
+                      >
+                        <IconPlus width={16} height={16} />
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <button

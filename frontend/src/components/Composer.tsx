@@ -36,6 +36,8 @@ interface MentionCandidate {
   id: string
   name: string
   avatarUrl?: string
+  isRole?: boolean
+  color?: string
 }
 
 export function Composer({ channelName, onOpenPicker }: Props) {
@@ -71,6 +73,7 @@ export function Composer({ channelName, onOpenPicker }: Props) {
   // chat participants), same sourcing as before.
   const channelMessages = useChatStore((s) => s.messagesByChannel[s.activeChannelId])
   const guildMembers = useChatStore((s) => s.membersByGuild[s.activeServerId])
+  const guildRoles = useChatStore((s) => s.rolesByGuild[s.activeServerId])
   const dmRecipients = useChatStore((s) => {
     if (s.activeServerId !== '@me') return undefined
     const ch = (s.channelsByServer['@me'] ?? []).find((c) => c.id === s.activeChannelId)
@@ -123,11 +126,15 @@ export function Composer({ channelName, onOpenPicker }: Props) {
   const mentionCandidates: MentionCandidate[] = useMemo(() => {
     if (!trigger || trigger.kind !== '@') return []
     const q = trigger.query.toLowerCase()
-    const filtered = q
+    // Roles first (matching Discord's @ menu ordering), then members.
+    const roleCands: MentionCandidate[] = (guildRoles ?? [])
+      .filter((r) => (q ? r.name.toLowerCase().includes(q) : true))
+      .map((r) => ({ id: r.id, name: r.name, isRole: true, color: r.color }))
+    const memberCands = q
       ? participants.filter((u) => u.name.toLowerCase().includes(q))
       : participants
-    return filtered.slice(0, 8)
-  }, [trigger, participants])
+    return [...roleCands, ...memberCands].slice(0, 8)
+  }, [trigger, participants, guildRoles])
 
   const emojiCandidates: EmojiEntry[] = useMemo(() => {
     if (!trigger || trigger.kind !== ':' || trigger.query.length < 2) return []
@@ -264,7 +271,11 @@ export function Composer({ channelName, onOpenPicker }: Props) {
 
   const applyMention = (cand: MentionCandidate) => {
     if (!trigger) return
-    replaceTrigger(editor, trigger.range, makeMentionNode(cand.id, cand.name))
+    replaceTrigger(
+      editor,
+      trigger.range,
+      makeMentionNode(cand.id, cand.name, { isRole: cand.isRole, color: cand.color }),
+    )
     setTrigger(null)
     ReactEditor.focus(editor)
   }
@@ -501,7 +512,7 @@ export function Composer({ channelName, onOpenPicker }: Props) {
           >
             <Glass refract className="flex max-h-80 overflow-hidden rounded-2xl">
               {slashGroups.length > 0 && (
-                <div className="flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-white/5 py-2">
+                <div className="scroll-none flex w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-white/5 py-2">
                   <BotRailButton label="All" active={slashBot === null} onSelect={() => setSlashBot(null)}>
                     <span className="text-[0.7rem] font-bold">All</span>
                   </BotRailButton>
@@ -523,7 +534,7 @@ export function Composer({ channelName, onOpenPicker }: Props) {
                   ))}
                 </div>
               )}
-              <div className="flex-1 overflow-y-auto p-1.5">
+              <div className="scroll-none flex-1 overflow-y-auto p-1.5">
                 <div className="px-2 py-1 text-[0.65rem] font-bold uppercase tracking-wide text-muted">
                   {slashBot ?? 'Commands'}
                 </div>
@@ -586,10 +597,10 @@ export function Composer({ channelName, onOpenPicker }: Props) {
             className="absolute bottom-full left-4 z-40 mb-1 w-72"
           >
             <Glass refract className="overflow-hidden rounded-2xl p-1.5">
-              <div className="px-2 py-1 text-[0.65rem] font-bold uppercase tracking-wide text-muted">Members</div>
+              <div className="px-2 py-1 text-[0.65rem] font-bold uppercase tracking-wide text-muted">Members & Roles</div>
               {mentionCandidates.map((c, i) => (
                 <button
-                  key={c.id}
+                  key={(c.isRole ? 'r' : 'u') + c.id}
                   onMouseDown={(e) => {
                     e.preventDefault()
                     applyMention(c)
@@ -601,8 +612,25 @@ export function Composer({ channelName, onOpenPicker }: Props) {
                     color: 'rgb(var(--c-text))',
                   }}
                 >
-                  <Avatar user={{ id: c.id, username: c.name, displayName: c.name, avatarUrl: c.avatarUrl }} size={24} />
-                  <span className="truncate font-medium">{c.name}</span>
+                  {c.isRole ? (
+                    <span
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[0.7rem] font-bold"
+                      style={{
+                        background: c.color ? `${c.color}33` : 'rgb(var(--c-accent) / 0.22)',
+                        color: c.color ?? 'rgb(var(--c-accent))',
+                      }}
+                    >
+                      @
+                    </span>
+                  ) : (
+                    <Avatar user={{ id: c.id, username: c.name, displayName: c.name, avatarUrl: c.avatarUrl }} size={24} />
+                  )}
+                  <span
+                    className="truncate font-medium"
+                    style={c.isRole && c.color ? { color: c.color } : undefined}
+                  >
+                    {c.isRole ? '@' : ''}{c.name}
+                  </span>
                 </button>
               ))}
             </Glass>
@@ -758,7 +786,7 @@ export function Composer({ channelName, onOpenPicker }: Props) {
                 }
               }}
               placeholder={`Message #${channelName}`}
-              className="no-drag selectable max-h-40 min-h-[1.5rem] flex-1 self-center overflow-y-auto px-2 text-[0.95rem] leading-snug text-text outline-none"
+              className="no-drag selectable max-h-40 min-h-[1.5rem] flex-1 self-center overflow-y-auto overflow-x-hidden break-words px-2 text-[0.95rem] leading-snug text-text outline-none"
               style={{ minWidth: 0, flex: 1 }}
             />
           </Slate>

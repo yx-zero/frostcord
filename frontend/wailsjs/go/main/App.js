@@ -46,6 +46,10 @@ export function GetFriends() {
   return window['go']['main']['App']['GetFriends']();
 }
 
+export function GetGuildFolders() {
+  return window['go']['main']['App']['GetGuildFolders']();
+}
+
 export function GetGuilds() {
   return window['go']['main']['App']['GetGuilds']();
 }
@@ -60,6 +64,10 @@ export function GetMessagesBefore(arg1, arg2) {
 
 export function GetPinnedMessages(arg1) {
   return window['go']['main']['App']['GetPinnedMessages'](arg1);
+}
+
+export function GetRoles(arg1) {
+  return window['go']['main']['App']['GetRoles'](arg1);
 }
 
 export function GetUserProfile(arg1) {

@@ -1,5 +1,5 @@
 import { Fragment, ReactNode, useState } from 'react'
-import { resolveChannel, resolveRole, resolveUser } from '../store/mentionStore'
+import { resolveChannel, resolveRole, resolveRoleColor, resolveUser } from '../store/mentionStore'
 import { EMOJI_REGEX, twemojiURL } from '../utils/emoji'
 import { onExternalClick } from '../utils/links'
 
@@ -44,7 +44,7 @@ type Token =
   | { t: 'strike'; v: string }
   | { t: 'spoiler'; v: string }
   | { t: 'link'; v: string; href: string }
-  | { t: 'mention'; kind: 'user' | 'channel' | 'role' | 'everyone'; label: string }
+  | { t: 'mention'; kind: 'user' | 'channel' | 'role' | 'everyone'; label: string; color?: string }
   | { t: 'emoji'; name: string; id: string; animated: boolean }
 
 const URL_RE = /(https?:\/\/[^\s]+)/g
@@ -104,7 +104,8 @@ function pushEntities(tokens: Token[], text: string) {
       tokens.push({ t: 'mention', kind: 'channel', label: name ? `#${name}` : '#channel' })
     } else if (m[6]) {
       const name = resolveRole(m[6])
-      tokens.push({ t: 'mention', kind: 'role', label: name ? `@${name}` : '@role' })
+      const color = resolveRoleColor(m[6])
+      tokens.push({ t: 'mention', kind: 'role', label: name ? `@${name}` : '@role', color })
     } else if (m[7]) {
       // timestamp
       const d = new Date(parseInt(m[7], 10) * 1000)
@@ -148,22 +149,29 @@ function Spoiler({ children }: { children: ReactNode }) {
 function Mention({
   kind,
   label,
+  roleColor,
   onAccent,
 }: {
   kind: 'user' | 'channel' | 'role' | 'everyone'
   label: string
+  roleColor?: string
   onAccent?: boolean
 }) {
   // On an accent (own) bubble, accent-on-accent is invisible — use the bubble's
   // own text color with a translucent white pill instead.
+  // A role with its own color tints both the text and the pill background.
   const color = onAccent
     ? 'currentColor'
-    : kind === 'everyone'
-      ? 'rgb(var(--c-warning))'
-      : 'rgb(var(--c-accent))'
+    : kind === 'role' && roleColor
+      ? roleColor
+      : kind === 'everyone'
+        ? 'rgb(var(--c-warning))'
+        : 'rgb(var(--c-accent))'
   const bg = onAccent
     ? 'rgb(255 255 255 / 0.22)'
-    : 'rgb(var(--c-accent) / 0.22)'
+    : kind === 'role' && roleColor
+      ? `${roleColor}33` // ~20% opacity tint of the role color
+      : 'rgb(var(--c-accent) / 0.22)'
   return (
     <span
       className="rounded px-1 font-semibold"
@@ -187,7 +195,7 @@ function renderToken(tok: Token, key: number, onAccent?: boolean): ReactNode {
     case 'spoiler':
       return <Spoiler key={key}>{tok.v}</Spoiler>
     case 'mention':
-      return <Mention key={key} kind={tok.kind} label={tok.label} onAccent={onAccent} />
+      return <Mention key={key} kind={tok.kind} label={tok.label} roleColor={tok.color} onAccent={onAccent} />
     case 'emoji':
       return (
         <img

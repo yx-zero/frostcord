@@ -92,14 +92,15 @@ function MentionNode(props: RenderElementProps) {
   const el = props.element as CustomElement & { type: 'mention' }
   const selected = useSelected()
   const focused = useFocused()
+  const roleColor = el.isRole ? el.color : undefined
   return (
     <span
       {...props.attributes}
       contentEditable={false}
       className="mx-px inline-block rounded px-1 font-medium"
       style={{
-        background: 'rgb(var(--c-accent) / 0.22)',
-        color: 'rgb(var(--c-accent2))',
+        background: roleColor ? `${roleColor}33` : 'rgb(var(--c-accent) / 0.22)',
+        color: roleColor ?? 'rgb(var(--c-accent2))',
         boxShadow: selected && focused ? '0 0 0 2px rgb(var(--c-accent) / 0.5)' : 'none',
       }}
     >

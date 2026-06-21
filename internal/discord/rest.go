@@ -165,6 +165,15 @@ func (r *REST) GuildChannels(guildID string) ([]Channel, error) {
 	return cs, nil
 }
 
+// GuildRoles lists the roles defined in a guild.
+func (r *REST) GuildRoles(guildID string) ([]Role, error) {
+	var rs []Role
+	if err := r.do(http.MethodGet, "/guilds/"+guildID+"/roles", nil, &rs); err != nil {
+		return nil, err
+	}
+	return rs, nil
+}
+
 // DMChannels lists the user's private (DM/group) channels.
 func (r *REST) DMChannels() ([]Channel, error) {
 	var cs []Channel

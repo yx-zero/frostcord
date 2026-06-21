@@ -25,6 +25,8 @@ export function GetFavoriteGifs():Promise<Array<main.GifDTO>>;
 
 export function GetFriends():Promise<Array<main.FriendDTO>>;
 
+export function GetGuildFolders():Promise<Array<main.ServerFolderDTO>>;
+
 export function GetGuilds():Promise<Array<main.GuildDTO>>;
 
 export function GetMessages(arg1:string):Promise<Array<main.MessageDTO>>;
@@ -32,6 +34,8 @@ export function GetMessages(arg1:string):Promise<Array<main.MessageDTO>>;
 export function GetMessagesBefore(arg1:string,arg2:string):Promise<Array<main.MessageDTO>>;
 
 export function GetPinnedMessages(arg1:string):Promise<Array<main.MessageDTO>>;
+
+export function GetRoles(arg1:string):Promise<Array<main.RoleDTO>>;
 
 export function GetUserProfile(arg1:string):Promise<main.ProfileDTO>;
 

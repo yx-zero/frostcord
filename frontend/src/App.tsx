@@ -8,6 +8,7 @@ import { SettingsPanel } from './components/SettingsPanel'
 import { LoginScreen } from './components/LoginScreen'
 import { ContextMenu } from './components/ContextMenu'
 import { ProfilePopout } from './components/ProfilePopout'
+import { ReactionPicker } from './components/ReactionPicker'
 import { Lightbox } from './components/Lightbox'
 import { initTheme, useThemeStore } from './theme/themeStore'
 import { useChatStore } from './store/chatStore'
@@ -30,6 +31,9 @@ function App() {
   const closeContextMenu = useAppStore((s) => s.closeContextMenu)
   const profile = useAppStore((s) => s.profile)
   const closeProfile = useAppStore((s) => s.closeProfile)
+  const reactionPicker = useAppStore((s) => s.reactionPicker)
+  const closeReactionPicker = useAppStore((s) => s.closeReactionPicker)
+  const toggleReaction = useChatStore((s) => s.toggleReaction)
 
   // Paint theme once.
   useEffect(() => {
@@ -145,6 +149,17 @@ function App() {
         x={profile.x}
         y={profile.y}
         onClose={closeProfile}
+      />
+
+      <ReactionPicker
+        open={reactionPicker.open}
+        x={reactionPicker.x}
+        y={reactionPicker.y}
+        onPick={(emoji) => {
+          toggleReaction(reactionPicker.messageId, emoji)
+          closeReactionPicker()
+        }}
+        onClose={closeReactionPicker}
       />
 
       <Lightbox />

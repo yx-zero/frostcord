@@ -26,8 +26,13 @@ export interface EmojiElement {
 
 export interface MentionElement {
   type: 'mention'
+  /** the user OR role id being mentioned */
   userId: string
   name: string
+  /** when true this is a @role mention (serializes to <@&id>) */
+  isRole?: boolean
+  /** "#rrggbb" role color for the pill */
+  color?: string
   children: [{ text: '' }]
 }
 

@@ -14,6 +14,7 @@ import {
   SlashCommandData,
 } from './types'
 import { emojiForShortcode } from '../../utils/emoji'
+import { resolveRole, resolveRoleColor, resolveUser } from '../../store/mentionStore'
 
 // Serialize the editor value to the string we send to Discord.
 export function serialize(nodes: Descendant[]): string {
@@ -25,7 +26,7 @@ function serializeNode(node: Descendant): string {
   const el = node as CustomElement
   switch (el.type) {
     case 'mention':
-      return `<@${el.userId}>`
+      return el.isRole ? `<@&${el.userId}>` : `<@${el.userId}>`
     case 'emoji':
       if (el.emojiId) {
         return `<${el.animated ? 'a' : ''}:${el.name}:${el.emojiId}>`
@@ -55,8 +56,19 @@ export function makeEmojiNode(opts: {
   }
 }
 
-export function makeMentionNode(userId: string, name: string): MentionElement {
-  return { type: 'mention', userId, name, children: [{ text: '' }] }
+export function makeMentionNode(
+  userId: string,
+  name: string,
+  opts?: { isRole?: boolean; color?: string },
+): MentionElement {
+  return {
+    type: 'mention',
+    userId,
+    name,
+    isRole: opts?.isRole,
+    color: opts?.color,
+    children: [{ text: '' }],
+  }
 }
 
 // Build a command inline node from a chosen slash command.
@@ -92,16 +104,25 @@ export function deserialize(content: string): Descendant[] {
       buf = ''
     }
   }
-  // Combined matcher for mentions and custom emoji.
-  const re = /<(@!?)(\d+)>|<(a)?:(\w+):(\d+)>/g
+  // Combined matcher for user mentions, role mentions and custom emoji.
+  const re = /<@!?(\d+)>|<@&(\d+)>|<(a)?:(\w+):(\d+)>/g
   let last = 0
   let m: RegExpExecArray | null
   while ((m = re.exec(content)) !== null) {
     buf += content.slice(last, m.index)
-    if (m[2]) {
-      // mention
+    if (m[1]) {
+      // user mention
       flush()
-      children.push(makeMentionNode(m[2], 'user'))
+      children.push(makeMentionNode(m[1], resolveUser(m[1]) ?? 'user'))
+    } else if (m[2]) {
+      // role mention
+      flush()
+      children.push(
+        makeMentionNode(m[2], resolveRole(m[2]) ?? 'role', {
+          isRole: true,
+          color: resolveRoleColor(m[2]),
+        }),
+      )
     } else if (m[5]) {
       // custom emoji
       flush()

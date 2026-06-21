@@ -37,6 +37,15 @@ type Guild struct {
 	Name     string    `json:"name"`
 	Icon     string    `json:"icon"`
 	Channels []Channel `json:"channels"`
+	Roles    []Role    `json:"roles"`
+}
+
+// Role is a guild role (for @role mention rendering + autocomplete).
+type Role struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Color    int    `json:"color"` // decimal RGB; 0 = no color
+	Position int    `json:"position"`
 }
 
 // IconURL builds the CDN url for a guild icon (or empty if none).

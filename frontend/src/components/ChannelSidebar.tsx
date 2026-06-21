@@ -197,7 +197,7 @@ export function ChannelSidebar({ onOpenSettings }: { onOpenSettings: () => void 
       )}
 
       {/* Channel list */}
-      <div className="scroll-thin mt-2 flex-1 overflow-y-auto px-2 pb-2">
+      <div className="scroll-none mt-2 flex-1 overflow-y-auto px-3 pb-2">
         {groups.map((group, gi) => {
           const catId = group.category?.id ?? `__uncat_${gi}`
           const isCollapsed = collapsed[catId]
@@ -286,6 +286,11 @@ export function ChannelSidebar({ onOpenSettings }: { onOpenSettings: () => void 
   )
 }
 
+// Fixed hover lift: the row springs to a static offset (and a slight scale) on
+// hover and stays there — it does NOT track the cursor's position.
+const hoverLift = { x: 8, scale: 1.02 }
+const hoverSpring = { type: 'spring', stiffness: 400, damping: 26, mass: 0.5 } as const
+
 function ChannelRow({
   channel,
   active,
@@ -309,10 +314,12 @@ function ChannelRow({
       avatarUrl: channel.avatarUrl,
     }
     return (
-      <button
+      <motion.button
+        whileHover={hoverLift}
+        transition={hoverSpring}
         onClick={onClick}
         onContextMenu={onContextMenu}
-        className="no-drag group relative flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm transition hover:bg-surface1/40"
+        className="no-drag group relative flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm transition-colors hover:bg-surface1/40"
       >
         {active && (
           <motion.span
@@ -336,15 +343,17 @@ function ChannelRow({
             </span>
           )}
         </div>
-      </button>
+      </motion.button>
     )
   }
 
   return (
-    <button
+    <motion.button
+      whileHover={hoverLift}
+      transition={hoverSpring}
       onClick={onClick}
       onContextMenu={onContextMenu}
-      className="no-drag group relative flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition"
+      className="no-drag group relative flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors"
       style={{
         color: active ? 'rgb(var(--c-text))' : 'rgb(var(--c-subtext))',
       }}
@@ -373,7 +382,7 @@ function ChannelRow({
           {channel.unread}
         </span>
       ) : null}
-    </button>
+    </motion.button>
   )
 }
 

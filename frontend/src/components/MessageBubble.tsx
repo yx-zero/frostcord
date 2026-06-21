@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Message } from '../types'
 import { Avatar } from './Avatar'
@@ -11,7 +12,11 @@ import { twemojiURL } from '../utils/emoji'
 import { onExternalClick } from '../utils/links'
 import { useChatStore } from '../store/chatStore'
 import { useAppStore } from '../store/appStore'
+import { useReactionStore, quickReactionList } from '../store/reactionStore'
 import { IconReply } from './icons'
+
+// Default quick-reaction emoji, shown until usage history reorders them.
+const DEFAULT_QUICK = ['👍', '❤️', '😂', '😮', '😢', '🔥']
 
 interface Props {
   message: Message
@@ -32,29 +37,35 @@ export function MessageBubble({ message, groupStart, groupEnd, highlighted, onJu
   const openContextMenu = useAppStore((s) => s.openContextMenu)
   const openProfile = useAppStore((s) => s.openProfile)
   const openLightbox = useAppStore((s) => s.openLightbox)
+  const openReactionPicker = useAppStore((s) => s.openReactionPicker)
   const mine = message.mine
 
-  // Quick-reaction emoji shown as a row at the top of the message menu.
-  const QUICK = ['👍', '❤️', '😂', '😮', '😢', '🔥']
+  // Quick-reaction row: default set, reordered/replaced by recent usage so the
+  // emoji you actually use bubble to the front (persisted across sessions).
+  const recent = useReactionStore((s) => s.recent)
+  const QUICK = useMemo(() => quickReactionList(DEFAULT_QUICK, recent), [recent])
 
   const onContextMenu = (e: React.MouseEvent) => {
     e.preventDefault()
     const copy = (t: string) => navigator.clipboard?.writeText(t)
+    const mx = e.clientX
+    const my = e.clientY
     const guildId = useChatStore.getState().activeServerId
     const link =
       guildId && guildId !== '@me'
         ? `https://discord.com/channels/${guildId}/${message.channelId}/${message.id}`
         : `https://discord.com/channels/@me/${message.channelId}/${message.id}`
-    openContextMenu(e.clientX, e.clientY, [
+    openContextMenu(mx, my, [
       {
         label: '',
         quickReactions: QUICK.map((emoji) => ({
           emoji,
           onClick: () => toggleReaction(message.id, emoji),
         })),
+        onMore: () => openReactionPicker(mx, my, message.id),
         onClick: () => {},
       },
-      { label: 'Add Reaction 👍', onClick: () => toggleReaction(message.id, '👍') },
+      { label: 'Add Reaction', onClick: () => openReactionPicker(mx, my, message.id) },
       ...(mine
         ? [{ label: 'Edit Message', onClick: () => setEditTarget(message) }]
         : []),

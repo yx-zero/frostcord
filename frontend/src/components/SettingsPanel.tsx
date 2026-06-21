@@ -56,40 +56,51 @@ export function SettingsPanel({
               </div>
 
               <div className="scroll-thin max-h-[64vh] overflow-y-auto px-6 py-5">
-                {/* Theme presets */}
+                {/* Theme presets, grouped by light/dark mode */}
                 <Section title="Theme">
-                  <div className="grid grid-cols-2 gap-3">
-                    {available.map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => setTheme(t.id)}
-                        className="no-drag flex items-center gap-3 rounded-xl p-3 text-left transition"
-                        style={{
-                          background: `rgb(${t.colors.base})`,
-                          border:
-                            theme.id === t.id
-                              ? `2px solid rgb(${t.colors.accent})`
-                              : '2px solid transparent',
-                          outline:
-                            theme.id === t.id
-                              ? '2px solid rgb(var(--c-accent) / 0.3)'
-                              : 'none',
-                        }}
-                      >
-                        <div className="flex gap-1">
-                          <Swatch color={t.colors.accent} />
-                          <Swatch color={t.colors.bubbleMine} />
-                          <Swatch color={t.colors.surface0} />
+                  {(['dark', 'light'] as const).map((m) => {
+                    const group = available.filter((t) => t.mode === m)
+                    if (group.length === 0) return null
+                    return (
+                      <div key={m} className="mb-4 last:mb-0">
+                        <div className="mb-2 text-[0.7rem] font-bold uppercase tracking-wide text-subtext">
+                          {m === 'dark' ? 'Dark themes' : 'Light themes'}
                         </div>
-                        <span
-                          className="text-sm font-bold"
-                          style={{ color: `rgb(${t.colors.text})` }}
-                        >
-                          {t.name}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          {group.map((t) => (
+                            <button
+                              key={t.id}
+                              onClick={() => setTheme(t.id)}
+                              className="no-drag flex items-center gap-3 rounded-xl p-3 text-left transition"
+                              style={{
+                                background: `rgb(${t.colors.base})`,
+                                border:
+                                  theme.id === t.id
+                                    ? `2px solid rgb(${t.colors.accent})`
+                                    : '2px solid transparent',
+                                outline:
+                                  theme.id === t.id
+                                    ? '2px solid rgb(var(--c-accent) / 0.3)'
+                                    : 'none',
+                              }}
+                            >
+                              <div className="flex gap-1">
+                                <Swatch color={t.colors.accent} />
+                                <Swatch color={t.colors.bubbleMine} />
+                                <Swatch color={t.colors.surface0} />
+                              </div>
+                              <span
+                                className="text-sm font-bold"
+                                style={{ color: `rgb(${t.colors.text})` }}
+                              >
+                                {t.name}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </Section>
 
                 {/* Custom theme builder */}

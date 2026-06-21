@@ -712,6 +712,70 @@ func (a *App) GetGuilds() ([]GuildDTO, error) {
 	return out, nil
 }
 
+type RoleDTO struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Color string `json:"color"` // "#rrggbb", empty if the role has no color
+}
+
+// GetRoles returns a guild's mentionable named roles (for @role rendering and
+// the @ autocomplete). @everyone is excluded — it's handled as @everyone text.
+func (a *App) GetRoles(guildID string) ([]RoleDTO, error) {
+	a.mu.Lock()
+	rest := a.rest
+	a.mu.Unlock()
+	if rest == nil || guildID == "" || guildID == "@me" {
+		return nil, nil
+	}
+	roles, err := rest.GuildRoles(guildID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]RoleDTO, 0, len(roles))
+	for _, r := range roles {
+		if r.Name == "@everyone" {
+			continue
+		}
+		color := ""
+		if r.Color != 0 {
+			color = fmt.Sprintf("#%06x", r.Color)
+		}
+		out = append(out, RoleDTO{ID: r.ID, Name: r.Name, Color: color})
+	}
+	return out, nil
+}
+
+type ServerFolderDTO struct {
+	ID       string   `json:"id"`    // folder id; empty => standalone guild
+	Name     string   `json:"name"`  // folder name (may be empty)
+	Color    string   `json:"color"` // "#rrggbb" or ""
+	GuildIDs []string `json:"guildIds"`
+}
+
+// GetGuildFolders returns the user's sidebar folder grouping. Standalone guilds
+// come back as single-guild entries with an empty ID.
+func (a *App) GetGuildFolders() ([]ServerFolderDTO, error) {
+	a.mu.Lock()
+	rest := a.rest
+	a.mu.Unlock()
+	if rest == nil {
+		return nil, nil
+	}
+	folders, err := rest.GuildFolders()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ServerFolderDTO, 0, len(folders))
+	for _, f := range folders {
+		color := ""
+		if f.Color != 0 {
+			color = fmt.Sprintf("#%06x", f.Color)
+		}
+		out = append(out, ServerFolderDTO{ID: f.ID, Name: f.Name, Color: color, GuildIDs: f.GuildIDs})
+	}
+	return out, nil
+}
+
 // sortGuilds orders guilds alphabetically (case-insensitive) for a stable,
 // predictable server list. (Discord's REST guild order isn't meaningful.)
 func sortGuilds(gs []GuildDTO) {

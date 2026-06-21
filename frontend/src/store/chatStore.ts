@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { Attachment, Channel, Message, Server, User } from '../types'
+import { Attachment, Channel, Message, Role, Server, ServerFolder, User } from '../types'
 import {
   me as mockMe,
   mockChannels,
@@ -7,12 +7,15 @@ import {
   mockServers,
 } from '../data/mock'
 import { api, events } from '../services/discord'
+import { useReactionStore } from './reactionStore'
 
 interface ChatState {
   /** false = mock data, true = real Discord backend */
   live: boolean
   me: User
   servers: Server[]
+  /** sidebar folder grouping (empty => no folders, render flat) */
+  serverFolders: ServerFolder[]
   channelsByServer: Record<string, Channel[]>
   activeServerId: string
   activeChannelId: string
@@ -30,6 +33,8 @@ interface ChatState {
   searchQuery: string
   /** members fetched per guild via the gateway lazy member list (op 14) */
   membersByGuild: Record<string, User[]>
+  /** mentionable roles fetched per guild (for @ autocomplete) */
+  rolesByGuild: Record<string, Role[]>
   /** userId -> presence status (online/idle/dnd/offline) */
   presence: Record<string, string>
 
@@ -114,6 +119,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   live: false,
   me: mockMe,
   servers: [],
+  serverFolders: [],
   channelsByServer: {},
   activeServerId: '',
   activeChannelId: '',
@@ -129,6 +135,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   searchOpen: false,
   searchQuery: '',
   membersByGuild: {},
+  rolesByGuild: {},
   presence: {},
 
   initMock: () => {
@@ -160,11 +167,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
       live: true,
       me,
       servers: [dmServer, ...servers],
+      serverFolders: [],
       channelsByServer: {},
       messagesByChannel: {},
       typing: [],
       connectionStatus: 'ready',
     })
+
+    // Fetch the sidebar folder grouping (non-blocking; rail renders flat until
+    // it arrives, then regroups).
+    api
+      .getServerFolders()
+      .then((folders) => set({ serverFolders: folders }))
+      .catch(() => {})
 
     // Wire gateway events -> store (incoming realtime messages).
     events.onMessage((m) => {
@@ -324,6 +339,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   setActiveServerAsync: async (id) => {
     set({ activeServerId: id })
+    // Load the guild's roles once, in parallel with channels, so they're in the
+    // mention registry before messages render (otherwise @role shows generic).
+    const rolesPromise =
+      id !== '@me' && !get().rolesByGuild[id]
+        ? api
+            .getRoles(id)
+            .then((roles) =>
+              set((s) => ({ rolesByGuild: { ...s.rolesByGuild, [id]: roles } })),
+            )
+            .catch(() => {})
+        : Promise.resolve()
+
     let channels = get().channelsByServer[id]
     if (!channels) {
       channels = id === '@me' ? await api.getDMChannels() : await api.getChannels(id)
@@ -331,6 +358,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         channelsByServer: { ...s.channelsByServer, [id]: channels! },
       }))
     }
+    await rolesPromise
     const firstText = channels.find((c) => c.type === 'text')
     if (firstText) get().setActiveChannel(firstText.id)
   },
@@ -648,6 +676,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const msg = list.find((m) => m.id === messageId)
     const existing = msg?.reactions.find((r) => r.emoji === emoji)
     const removing = !!existing?.me
+
+    // Adding a reaction promotes the emoji in the recently-used quick row.
+    if (!removing) useReactionStore.getState().use(emoji)
 
     // Optimistic local update.
     set((s) => ({

@@ -306,11 +306,30 @@ export namespace discord {
 	
 	
 	
+	export class Role {
+	    id: string;
+	    name: string;
+	    color: number;
+	    position: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Role(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.color = source["color"];
+	        this.position = source["position"];
+	    }
+	}
 	export class Guild {
 	    id: string;
 	    name: string;
 	    icon: string;
 	    channels: Channel[];
+	    roles: Role[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Guild(source);
@@ -322,6 +341,7 @@ export namespace discord {
 	        this.name = source["name"];
 	        this.icon = source["icon"];
 	        this.channels = this.convertValues(source["channels"], Channel);
+	        this.roles = this.convertValues(source["roles"], Role);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -820,6 +840,7 @@ export namespace discord {
 		    return a;
 		}
 	}
+	
 	
 
 }
@@ -1508,6 +1529,40 @@ export namespace main {
 	}
 	
 	
+	export class RoleDTO {
+	    id: string;
+	    name: string;
+	    color: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RoleDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.color = source["color"];
+	    }
+	}
+	export class ServerFolderDTO {
+	    id: string;
+	    name: string;
+	    color: string;
+	    guildIds: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ServerFolderDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.color = source["color"];
+	        this.guildIds = source["guildIds"];
+	    }
+	}
 	export class UploadFileInput {
 	    filename: string;
 	    data: string;

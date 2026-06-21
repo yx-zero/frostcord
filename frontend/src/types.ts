@@ -19,6 +19,13 @@ export interface User {
   bot?: boolean
 }
 
+export interface Role {
+  id: string
+  name: string
+  /** "#rrggbb" role color, if any */
+  color?: string
+}
+
 export interface Attachment {
   id: string
   type: 'image' | 'video' | 'gif' | 'sticker' | 'audio' | 'file'
@@ -146,6 +153,16 @@ export interface Server {
   color?: string
   unread?: boolean
   mentionCount?: number
+}
+
+/** A sidebar folder grouping servers (from the user's settings). */
+export interface ServerFolder {
+  /** folder id; empty string means a standalone (non-foldered) guild */
+  id: string
+  name: string
+  /** "#rrggbb" folder color, if any */
+  color?: string
+  guildIds: string[]
 }
 
 export interface UserProfile {

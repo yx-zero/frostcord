@@ -7,18 +7,21 @@ interface MentionState {
   users: Record<string, string> // id -> display name
   channels: Record<string, string> // id -> channel name
   roles: Record<string, string> // id -> role name
+  roleColors: Record<string, string> // id -> "#rrggbb"
   addUser: (id: string, name: string) => void
   addUsers: (entries: Record<string, string>) => void
   addChannel: (id: string, name: string) => void
   addChannels: (entries: Record<string, string>) => void
   addRole: (id: string, name: string) => void
   addRoles: (entries: Record<string, string>) => void
+  addRoleColors: (entries: Record<string, string>) => void
 }
 
 export const useMentionStore = create<MentionState>((set) => ({
   users: {},
   channels: {},
   roles: {},
+  roleColors: {},
   addUser: (id, name) =>
     set((s) => ({ users: { ...s.users, [id]: name } })),
   addUsers: (entries) =>
@@ -31,6 +34,8 @@ export const useMentionStore = create<MentionState>((set) => ({
     set((s) => ({ roles: { ...s.roles, [id]: name } })),
   addRoles: (entries) =>
     set((s) => ({ roles: { ...s.roles, ...entries } })),
+  addRoleColors: (entries) =>
+    set((s) => ({ roleColors: { ...s.roleColors, ...entries } })),
 }))
 
 // Non-hook accessors for use inside render helpers.
@@ -42,6 +47,9 @@ export function resolveChannel(id: string): string | undefined {
 }
 export function resolveRole(id: string): string | undefined {
   return useMentionStore.getState().roles[id]
+}
+export function resolveRoleColor(id: string): string | undefined {
+  return useMentionStore.getState().roleColors[id]
 }
 
 // Convert Discord raw syntax into readable plain text (for previews/reply bars):
