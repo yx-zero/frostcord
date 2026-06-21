@@ -12,6 +12,9 @@ import {
   GetRoles,
   GetChannels,
   GetDMChannels,
+  GetMessageRequests,
+  AcceptMessageRequest as goAcceptMessageRequest,
+  DeclineMessageRequest as goDeclineMessageRequest,
   GetMessages,
   GetMessagesBefore as goGetMessagesBefore,
   GetPinnedMessages,
@@ -85,6 +88,8 @@ interface ChannelDTO {
   avatarUrl: string
   subtitle: string
   recipients: UserDTO[] | null
+  isMessageRequest?: boolean
+  isSpam?: boolean
 }
 interface AttachmentDTO {
   id: string
@@ -233,6 +238,7 @@ function mapChannel(c: ChannelDTO): Channel {
     avatarUrl: c.avatarUrl || undefined,
     subtitle: c.subtitle || undefined,
     recipients: c.recipients ? c.recipients.map(mapUser) : undefined,
+    isSpam: c.isSpam || undefined,
   }
 }
 
@@ -423,6 +429,19 @@ export const api = {
     for (const c of channels) names[c.id] = c.name
     useMentionStore.getState().addChannels(names)
     return channels
+  },
+
+  async getMessageRequests(): Promise<Channel[]> {
+    const cs = (await GetMessageRequests()) as ChannelDTO[]
+    return (cs ?? []).map(mapChannel)
+  },
+
+  acceptMessageRequest(channelId: string): Promise<void> {
+    return goAcceptMessageRequest(channelId)
+  },
+
+  declineMessageRequest(channelId: string): Promise<void> {
+    return goDeclineMessageRequest(channelId)
   },
 
   async getMessages(channelId: string): Promise<Message[]> {

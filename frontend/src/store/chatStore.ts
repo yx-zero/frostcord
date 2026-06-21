@@ -16,6 +16,12 @@ interface ChatState {
   servers: Server[]
   /** sidebar folder grouping (empty => no folders, render flat) */
   serverFolders: ServerFolder[]
+  /** pending DM message requests (from non-friends) */
+  messageRequests: Channel[]
+  /** pending spam message requests (separate folder) */
+  spamRequests: Channel[]
+  /** the message request currently previewed as a temporary chat, if any */
+  activeRequestChannel: Channel | null
   channelsByServer: Record<string, Channel[]>
   activeServerId: string
   activeChannelId: string
@@ -47,6 +53,10 @@ interface ChatState {
   setActiveServerAsync: (id: string) => Promise<void>
   loadChannelMessages: (channelId: string) => Promise<void>
   setActiveChannel: (id: string) => void
+  loadMessageRequests: () => Promise<void>
+  openMessageRequest: (channel: Channel) => void
+  acceptMessageRequest: (channelId: string) => Promise<void>
+  declineMessageRequest: (channelId: string) => Promise<void>
   sendMessage: (content: string, attachments?: Attachment[]) => void
   executeCommand: (
     cmd: import('../services/discord').SlashCommand,
@@ -120,6 +130,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   me: mockMe,
   servers: [],
   serverFolders: [],
+  messageRequests: [],
+  spamRequests: [],
+  activeRequestChannel: null,
   channelsByServer: {},
   activeServerId: '',
   activeChannelId: '',
@@ -168,6 +181,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       me,
       servers: [dmServer, ...servers],
       serverFolders: [],
+      messageRequests: [],
+      spamRequests: [],
+      activeRequestChannel: null,
       channelsByServer: {},
       messagesByChannel: {},
       typing: [],
@@ -180,6 +196,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       .getServerFolders()
       .then((folders) => set({ serverFolders: folders }))
       .catch(() => {})
+
+    // Fetch pending message requests for the inbox + badge.
+    void get().loadMessageRequests()
 
     // Wire gateway events -> store (incoming realtime messages).
     events.onMessage((m) => {
@@ -377,8 +396,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   setActiveChannel: (id) => {
-    // Reset transient per-channel UI when switching channels.
-    set({ activeChannelId: id, typing: [], replyTarget: null, editTarget: null })
+    // Reset transient per-channel UI when switching channels (and leave any
+    // message-request preview).
+    set({ activeChannelId: id, typing: [], replyTarget: null, editTarget: null, activeRequestChannel: null })
     if (get().live && !get().messagesByChannel[id]) {
       void get().loadChannelMessages(id)
     }
@@ -390,11 +410,90 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  loadMessageRequests: async () => {
+    if (!get().live) return
+    try {
+      const all = await api.getMessageRequests()
+      set({
+        messageRequests: all.filter((c) => !c.isSpam),
+        spamRequests: all.filter((c) => c.isSpam),
+      })
+    } catch {
+      /* ignore */
+    }
+  },
+
+  // Open a message request as a temporary chat (preview), showing the
+  // accept/ignore banner; sending a message there auto-accepts it.
+  openMessageRequest: (channel) => {
+    set({
+      activeRequestChannel: channel,
+      activeChannelId: channel.id,
+      typing: [],
+      replyTarget: null,
+      editTarget: null,
+    })
+    if (get().live && !get().messagesByChannel[channel.id]) {
+      void get().loadChannelMessages(channel.id)
+    }
+  },
+
+  acceptMessageRequest: async (channelId) => {
+    // Optimistically drop it from the inbox + clear the pending banner.
+    set((s) => ({
+      messageRequests: s.messageRequests.filter((c) => c.id !== channelId),
+      spamRequests: s.spamRequests.filter((c) => c.id !== channelId),
+      activeRequestChannel:
+        s.activeRequestChannel?.id === channelId ? null : s.activeRequestChannel,
+    }))
+    try {
+      await api.acceptMessageRequest(channelId)
+    } catch {
+      void get().loadMessageRequests()
+      return
+    }
+    // It's now a normal DM — refresh the DM list so it appears.
+    try {
+      const dms = await api.getDMChannels()
+      set((s) => ({ channelsByServer: { ...s.channelsByServer, '@me': dms } }))
+    } catch {
+      /* ignore */
+    }
+  },
+
+  declineMessageRequest: async (channelId) => {
+    set((s) => ({
+      messageRequests: s.messageRequests.filter((c) => c.id !== channelId),
+      spamRequests: s.spamRequests.filter((c) => c.id !== channelId),
+      activeRequestChannel:
+        s.activeRequestChannel?.id === channelId ? null : s.activeRequestChannel,
+    }))
+    try {
+      await api.declineMessageRequest(channelId)
+    } catch {
+      void get().loadMessageRequests()
+    }
+  },
+
   sendMessage: (content, attachments = []) => {
     const trimmed = content.trim()
     if (!trimmed && attachments.length === 0) return
     const channelId = get().activeChannelId
     if (!channelId) return
+    // Sending into a pending message request auto-accepts it (like Discord).
+    const req = get().activeRequestChannel
+    if (req && req.id === channelId) {
+      api.acceptMessageRequest(channelId).catch(() => {})
+      set((s) => ({
+        activeRequestChannel: null,
+        messageRequests: s.messageRequests.filter((c) => c.id !== channelId),
+        spamRequests: s.spamRequests.filter((c) => c.id !== channelId),
+      }))
+      api
+        .getDMChannels()
+        .then((dms) => set((s) => ({ channelsByServer: { ...s.channelsByServer, '@me': dms } })))
+        .catch(() => {})
+    }
     const nonce = makeNonce()
     const reply = get().replyTarget
     const optimistic: Message = {

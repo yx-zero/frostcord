@@ -33,9 +33,11 @@ interface AppState {
   reactionPicker: ReactionPickerState
   lightboxUrl: string | null
   showFriends: boolean
+  showMessageRequests: boolean
   setPhase: (p: AppPhase) => void
   setBanner: (b: string) => void
   setShowFriends: (v: boolean) => void
+  setShowMessageRequests: (v: boolean) => void
   openContextMenu: (x: number, y: number, items: MenuItem[]) => void
   closeContextMenu: () => void
   openProfile: (user: User, x: number, y: number) => void
@@ -54,9 +56,11 @@ export const useAppStore = create<AppState>((set) => ({
   reactionPicker: { open: false, x: 0, y: 0, messageId: '' },
   lightboxUrl: null,
   showFriends: false,
+  showMessageRequests: false,
   setPhase: (phase) => set({ phase }),
   setBanner: (banner) => set({ banner }),
   setShowFriends: (showFriends) => set({ showFriends }),
+  setShowMessageRequests: (showMessageRequests) => set({ showMessageRequests }),
   openContextMenu: (x, y, items) =>
     set({ contextMenu: { open: true, x, y, items } }),
   closeContextMenu: () =>

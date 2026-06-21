@@ -8,6 +8,7 @@ import { MembersPanel } from './MembersPanel'
 import { Glass } from './Glass'
 import { IconSearch, IconClose } from './icons'
 import { useChatStore } from '../store/chatStore'
+import { useAppStore } from '../store/appStore'
 import { useComposerBridge } from '../store/composerBridge'
 import { typingUsers } from '../data/mock'
 import { api } from '../services/discord'
@@ -28,13 +29,19 @@ export function ChatView({ onOpenSettings }: { onOpenSettings: () => void }) {
   const searchQuery = useChatStore((s) => s.searchQuery)
   const setSearchQuery = useChatStore((s) => s.setSearchQuery)
   const toggleSearch = useChatStore((s) => s.toggleSearch)
+  const activeRequestChannel = useChatStore((s) => s.activeRequestChannel)
+  const acceptMessageRequest = useChatStore((s) => s.acceptMessageRequest)
+  const declineMessageRequest = useChatStore((s) => s.declineMessageRequest)
+  const setShowMessageRequests = useAppStore((s) => s.setShowMessageRequests)
 
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerTab, setPickerTab] = useState<PickerTab>('emoji')
 
-  const channel = (channelsByServer[activeServerId] ?? []).find(
-    (c) => c.id === activeChannelId,
-  )
+  const isPendingRequest =
+    !!activeRequestChannel && activeRequestChannel.id === activeChannelId
+  const channel =
+    (channelsByServer[activeServerId] ?? []).find((c) => c.id === activeChannelId) ??
+    (isPendingRequest ? activeRequestChannel! : undefined)
   const allMessages = messagesByChannel[activeChannelId] ?? []
   const messages =
     searchOpen && searchQuery.trim()
@@ -129,6 +136,46 @@ export function ChatView({ onOpenSettings }: { onOpenSettings: () => void }) {
         </AnimatePresence>
 
         <MessageList messages={messages} typing={typing} />
+
+        {/* Pending message-request banner — sending also auto-accepts. */}
+        {isPendingRequest && channel && (
+          <div className="px-3 pb-1">
+            <Glass className="flex items-center gap-3 rounded-xl px-4 py-2.5">
+              <span className="text-sm text-subtext">
+                <span className="font-bold text-text">{channel.name}</span> wants to message you. Accept to chat — or just reply to accept automatically.
+              </span>
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={() => acceptMessageRequest(channel.id)}
+                  className="no-drag rounded-lg px-3 py-1 text-xs font-bold"
+                  style={{ background: 'rgb(var(--c-accent))', color: 'rgb(var(--c-bubble-mine-text))' }}
+                >
+                  Accept DM
+                </button>
+                <button
+                  onClick={() => {
+                    declineMessageRequest(channel.id)
+                    setShowMessageRequests(true)
+                  }}
+                  className="no-drag rounded-lg px-3 py-1 text-xs font-bold"
+                  style={{ background: 'rgb(var(--c-surface2))', color: 'rgb(var(--c-text))' }}
+                >
+                  Ignore
+                </button>
+                <button
+                  onClick={() => {
+                    declineMessageRequest(channel.id)
+                    setShowMessageRequests(true)
+                  }}
+                  className="no-drag rounded-lg px-3 py-1 text-xs font-bold"
+                  style={{ background: 'rgb(var(--c-danger) / 0.85)', color: 'white' }}
+                >
+                  Report Spam
+                </button>
+              </div>
+            </Glass>
+          </div>
+        )}
 
         <div className="relative">
           <EmojiPicker

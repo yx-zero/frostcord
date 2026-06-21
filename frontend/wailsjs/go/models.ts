@@ -69,6 +69,8 @@ export namespace discord {
 	    recipients: User[];
 	    last_message_id: string;
 	    icon: string;
+	    is_message_request: boolean;
+	    is_spam: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Channel(source);
@@ -86,6 +88,8 @@ export namespace discord {
 	        this.recipients = this.convertValues(source["recipients"], User);
 	        this.last_message_id = source["last_message_id"];
 	        this.icon = source["icon"];
+	        this.is_message_request = source["is_message_request"];
+	        this.is_spam = source["is_spam"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -955,6 +959,8 @@ export namespace main {
 	    avatarUrl: string;
 	    subtitle: string;
 	    recipients: UserDTO[];
+	    isMessageRequest: boolean;
+	    isSpam: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new ChannelDTO(source);
@@ -973,6 +979,8 @@ export namespace main {
 	        this.avatarUrl = source["avatarUrl"];
 	        this.subtitle = source["subtitle"];
 	        this.recipients = this.convertValues(source["recipients"], UserDTO);
+	        this.isMessageRequest = source["isMessageRequest"];
+	        this.isSpam = source["isSpam"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

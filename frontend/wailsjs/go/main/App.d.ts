@@ -5,11 +5,15 @@ import {discord} from '../models';
 
 export function AcceptFriend(arg1:string):Promise<void>;
 
+export function AcceptMessageRequest(arg1:string):Promise<void>;
+
 export function AddReaction(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function Autocomplete(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:number,arg8:Array<main.CommandOptionInput>,arg9:string):Promise<Array<main.AutocompleteChoiceDTO>>;
 
 export function CancelQRLogin():Promise<void>;
+
+export function DeclineMessageRequest(arg1:string):Promise<void>;
 
 export function DeleteMessage(arg1:string,arg2:string):Promise<void>;
 
@@ -28,6 +32,8 @@ export function GetFriends():Promise<Array<main.FriendDTO>>;
 export function GetGuildFolders():Promise<Array<main.ServerFolderDTO>>;
 
 export function GetGuilds():Promise<Array<main.GuildDTO>>;
+
+export function GetMessageRequests():Promise<Array<main.ChannelDTO>>;
 
 export function GetMessages(arg1:string):Promise<Array<main.MessageDTO>>;
 

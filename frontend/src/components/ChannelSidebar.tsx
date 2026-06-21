@@ -16,6 +16,7 @@ import {
   IconHeadphones,
   IconSettings,
   IconUsers,
+  IconInbox,
 } from './icons'
 
 export function ChannelSidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
@@ -30,6 +31,9 @@ export function ChannelSidebar({ onOpenSettings }: { onOpenSettings: () => void 
   const setPhase = useAppStore((s) => s.setPhase)
   const showFriends = useAppStore((s) => s.showFriends)
   const setShowFriends = useAppStore((s) => s.setShowFriends)
+  const showMessageRequests = useAppStore((s) => s.showMessageRequests)
+  const setShowMessageRequests = useAppStore((s) => s.setShowMessageRequests)
+  const messageRequestCount = useChatStore((s) => s.messageRequests.length)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [filter, setFilter] = useState('')
 
@@ -156,6 +160,11 @@ export function ChannelSidebar({ onOpenSettings }: { onOpenSettings: () => void 
     return result
   }, [filteredChannels, filter])
 
+  // When a DM-view utility page (Friends / Message Requests) is displayed, no DM
+  // row is the active chat — so don't highlight one.
+  const onUtilityPage =
+    activeServerId === '@me' && (showFriends || showMessageRequests)
+
   return (
     <Glass className="m-2 mr-0 flex w-60 shrink-0 flex-col overflow-hidden rounded-2xl">
       {/* Server header */}
@@ -179,11 +188,14 @@ export function ChannelSidebar({ onOpenSettings }: { onOpenSettings: () => void 
         </div>
       </div>
 
-      {/* Friends button (DM view only) */}
+      {/* Friends + Message Requests (DM view only) */}
       {activeServerId === '@me' && (
-        <div className="px-2 pt-2">
+        <div className="flex flex-col gap-0.5 px-2 pt-2">
           <button
-            onClick={() => setShowFriends(true)}
+            onClick={() => {
+              setShowMessageRequests(false)
+              setShowFriends(true)
+            }}
             className="no-drag flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-semibold transition"
             style={{
               background: showFriends ? 'rgb(var(--c-accent) / 0.18)' : 'transparent',
@@ -192,6 +204,28 @@ export function ChannelSidebar({ onOpenSettings }: { onOpenSettings: () => void 
           >
             <IconUsers width={18} height={18} />
             Friends
+          </button>
+          <button
+            onClick={() => {
+              setShowFriends(false)
+              setShowMessageRequests(true)
+            }}
+            className="no-drag flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-semibold transition"
+            style={{
+              background: showMessageRequests ? 'rgb(var(--c-accent) / 0.18)' : 'transparent',
+              color: showMessageRequests ? 'rgb(var(--c-text))' : 'rgb(var(--c-subtext))',
+            }}
+          >
+            <IconInbox width={18} height={18} />
+            Message Requests
+            {messageRequestCount > 0 && (
+              <span
+                className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[0.65rem] font-bold text-white"
+                style={{ background: 'rgb(var(--c-danger))' }}
+              >
+                {messageRequestCount}
+              </span>
+            )}
           </button>
         </div>
       )}
@@ -228,16 +262,17 @@ export function ChannelSidebar({ onOpenSettings }: { onOpenSettings: () => void 
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
                     transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                    className="overflow-hidden"
+                    className="overflow-hidden pr-2"
                   >
                     {group.items.map((ch) => (
                       <ChannelRow
                         key={ch.id}
                         channel={ch}
-                        active={ch.id === activeChannelId}
+                        active={ch.id === activeChannelId && !onUtilityPage}
                         onClick={() => {
                           if (ch.type === 'text') {
                             setShowFriends(false)
+                            setShowMessageRequests(false)
                             setActiveChannel(ch.id)
                           }
                         }}
@@ -286,9 +321,12 @@ export function ChannelSidebar({ onOpenSettings }: { onOpenSettings: () => void 
   )
 }
 
-// Fixed hover lift: the row springs to a static offset (and a slight scale) on
-// hover and stays there — it does NOT track the cursor's position.
-const hoverLift = { x: 8, scale: 1.02 }
+// Fixed hover lift: the row springs to a static offset on hover and stays there
+// — it does NOT track the cursor's position. We deliberately avoid `scale`
+// (which would widen the row and push its right rounded corner past the
+// sidebar's right gutter into the `overflow-hidden` wall). The rows reserve a
+// matching right margin so this rightward shift slides into free space.
+const hoverLift = { x: 6 }
 const hoverSpring = { type: 'spring', stiffness: 400, damping: 26, mass: 0.5 } as const
 
 function ChannelRow({

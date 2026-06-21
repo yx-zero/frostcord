@@ -141,6 +141,8 @@ export interface Channel {
   subtitle?: string
   /** group-DM members */
   recipients?: User[]
+  /** true when this DM is a pending spam message request */
+  isSpam?: boolean
 }
 
 export interface Server {

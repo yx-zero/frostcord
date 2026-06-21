@@ -13,6 +13,7 @@ import { onExternalClick } from '../utils/links'
 import { useChatStore } from '../store/chatStore'
 import { useAppStore } from '../store/appStore'
 import { useReactionStore, quickReactionList } from '../store/reactionStore'
+import { previewText } from '../store/mentionStore'
 import { IconReply } from './icons'
 
 // Default quick-reaction emoji, shown until usage history reorders them.
@@ -233,7 +234,7 @@ export function MessageBubble({ message, groupStart, groupEnd, highlighted, onJu
               <span className="font-semibold opacity-90">
                 {message.replyTo.authorName}
               </span>
-              <span className="truncate opacity-70">{message.replyTo.preview}</span>
+              <span className="truncate opacity-70">{previewText(message.replyTo.preview)}</span>
             </button>
           )}
 

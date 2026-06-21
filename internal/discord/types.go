@@ -82,6 +82,9 @@ type Channel struct {
 	Recipients    []User `json:"recipients"`
 	LastMessageID string `json:"last_message_id"`
 	Icon          string `json:"icon"`
+	// Message-request DMs (from non-friends) carry this flag.
+	IsMessageRequest bool `json:"is_message_request"`
+	IsSpam           bool `json:"is_spam"`
 }
 
 type Attachment struct {

@@ -183,6 +183,55 @@ func (r *REST) DMChannels() ([]Channel, error) {
 	return cs, nil
 }
 
+// AcceptMessageRequest consents to a DM message request (consent_status=2),
+// moving it out of the requests inbox into normal DMs.
+func (r *REST) AcceptMessageRequest(channelID string) error {
+	body := map[string]any{"consent_status": 2}
+	return r.do(http.MethodPut, "/channels/"+channelID+"/recipients/@me", body, nil)
+}
+
+// DeclineMessageRequest rejects (and removes) a DM message request.
+func (r *REST) DeclineMessageRequest(channelID string) error {
+	return r.do(http.MethodDelete, "/channels/"+channelID+"/recipients/@me", nil, nil)
+}
+
+// MessageRequestSupplemental carries the preview (sender + first message) shown
+// for a pending message request.
+type MessageRequestSupplemental struct {
+	ChannelID      string   `json:"channel_id"`
+	MessagePreview *Message `json:"message_preview"`
+}
+
+// MessageRequestSupplementalData resolves sender + preview for message-request
+// channels (READY only carries the ids/flags, not recipient details). Max 25 ids.
+func (r *REST) MessageRequestSupplementalData(channelIDs []string) ([]MessageRequestSupplemental, error) {
+	if len(channelIDs) == 0 {
+		return nil, nil
+	}
+	q := ""
+	for i, id := range channelIDs {
+		if i > 0 {
+			q += "&"
+		}
+		q += "channel_ids=" + id
+	}
+	var out []MessageRequestSupplemental
+	if err := r.do(http.MethodGet, "/users/@me/message-requests/supplemental-data?"+q, nil, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Channel fetches a single channel (used as a fallback to resolve a message
+// request's recipient when no preview is available).
+func (r *REST) Channel(id string) (*Channel, error) {
+	var c Channel
+	if err := r.do(http.MethodGet, "/channels/"+id, nil, &c); err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
 // Messages fetches recent messages for a channel (most recent first).
 func (r *REST) Messages(channelID string, limit int) ([]Message, error) {
 	if limit <= 0 || limit > 100 {

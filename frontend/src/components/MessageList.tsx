@@ -161,7 +161,10 @@ export function MessageList({ messages, typing }: Props) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.9 }}
             onClick={() => scrollToBottom(true)}
-            className="glass glass-sheen no-drag absolute bottom-4 right-6 flex h-10 w-10 items-center justify-center rounded-full text-text"
+            // Force absolute: the `.glass` rule (loaded after Tailwind utilities)
+            // sets position:relative, which would otherwise override `absolute`.
+            style={{ position: 'absolute' }}
+            className="glass glass-sheen no-drag bottom-4 right-6 flex h-10 w-10 items-center justify-center rounded-full text-text"
             title="Jump to latest"
           >
             <IconChevron width={20} height={20} />

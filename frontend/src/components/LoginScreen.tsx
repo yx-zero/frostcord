@@ -6,6 +6,7 @@ import { Avatar } from './Avatar'
 import { api, events, SavedAccount } from '../services/discord'
 import { User } from '../types'
 import { useChatStore } from '../store/chatStore'
+import { WindowControls } from './WindowControls'
 import { IconClose } from './icons'
 
 interface Props {
@@ -151,6 +152,11 @@ export function LoginScreen({ onMockMode }: Props) {
   return (
     <div className="relative flex h-screen w-screen items-center justify-center">
       <div className="app-wallpaper animated" />
+
+      {/* Draggable top bar with window controls */}
+      <div className="drag-region absolute inset-x-0 top-0 z-20 flex h-10 items-center justify-end px-1">
+        <WindowControls />
+      </div>
       <motion.div
         initial={{ opacity: 0, y: 16, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -307,11 +313,6 @@ export function LoginScreen({ onMockMode }: Props) {
           >
             Preview UI with demo data
           </button>
-
-          <p className="mt-5 text-center text-[0.7rem] leading-relaxed text-muted">
-            Third-party clients violate Discord's ToS and may risk your account.
-            Use at your own risk.
-          </p>
         </Glass>
       </motion.div>
     </div>

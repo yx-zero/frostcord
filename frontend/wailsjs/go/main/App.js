@@ -6,6 +6,10 @@ export function AcceptFriend(arg1) {
   return window['go']['main']['App']['AcceptFriend'](arg1);
 }
 
+export function AcceptMessageRequest(arg1) {
+  return window['go']['main']['App']['AcceptMessageRequest'](arg1);
+}
+
 export function AddReaction(arg1, arg2, arg3) {
   return window['go']['main']['App']['AddReaction'](arg1, arg2, arg3);
 }
@@ -16,6 +20,10 @@ export function Autocomplete(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg
 
 export function CancelQRLogin() {
   return window['go']['main']['App']['CancelQRLogin']();
+}
+
+export function DeclineMessageRequest(arg1) {
+  return window['go']['main']['App']['DeclineMessageRequest'](arg1);
 }
 
 export function DeleteMessage(arg1, arg2) {
@@ -52,6 +60,10 @@ export function GetGuildFolders() {
 
 export function GetGuilds() {
   return window['go']['main']['App']['GetGuilds']();
+}
+
+export function GetMessageRequests() {
+  return window['go']['main']['App']['GetMessageRequests']();
 }
 
 export function GetMessages(arg1) {

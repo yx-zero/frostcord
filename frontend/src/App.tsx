@@ -4,12 +4,15 @@ import { ServerRail } from './components/ServerRail'
 import { ChannelSidebar } from './components/ChannelSidebar'
 import { ChatView } from './components/ChatView'
 import { FriendsView } from './components/FriendsView'
+import { MessageRequestsView } from './components/MessageRequestsView'
 import { SettingsPanel } from './components/SettingsPanel'
 import { LoginScreen } from './components/LoginScreen'
 import { ContextMenu } from './components/ContextMenu'
 import { ProfilePopout } from './components/ProfilePopout'
 import { ReactionPicker } from './components/ReactionPicker'
 import { Lightbox } from './components/Lightbox'
+import { Glass } from './components/Glass'
+import { WindowControls } from './components/WindowControls'
 import { initTheme, useThemeStore } from './theme/themeStore'
 import { useChatStore } from './store/chatStore'
 import { useAppStore } from './store/appStore'
@@ -17,6 +20,10 @@ import { api, events, isWails } from './services/discord'
 
 function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // While true, we're checking for a single saved account to auto-login — show a
+  // loading screen rather than flashing the login page.
+  const [checkingAccounts, setCheckingAccounts] = useState(() => isWails())
+  const [autoLoginName, setAutoLoginName] = useState('')
   const animatedWallpaper = useThemeStore((s) => s.animatedWallpaper)
   const phase = useAppStore((s) => s.phase)
   const setPhase = useAppStore((s) => s.setPhase)
@@ -27,6 +34,7 @@ function App() {
   const live = useChatStore((s) => s.live)
   const activeServerId = useChatStore((s) => s.activeServerId)
   const showFriends = useAppStore((s) => s.showFriends)
+  const showMessageRequests = useAppStore((s) => s.showMessageRequests)
   const contextMenu = useAppStore((s) => s.contextMenu)
   const closeContextMenu = useAppStore((s) => s.closeContextMenu)
   const profile = useAppStore((s) => s.profile)
@@ -49,12 +57,33 @@ function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // When not inside Wails (browser dev), jump straight to mock UI.
+  // When not inside Wails (browser dev), jump straight to mock UI. Inside Wails,
+  // auto-login when there's exactly one saved account; 0 or 2+ show the login
+  // page (QR/token or the account picker).
   useEffect(() => {
     if (!isWails()) {
       initMock()
       setPhase('app')
+      return
     }
+    api
+      .listAccounts()
+      .then(async (accts) => {
+        if (accts.length !== 1) {
+          setCheckingAccounts(false)
+          return
+        }
+        setAutoLoginName(accts[0].globalName || accts[0].username)
+        const res = await api.switchAccount(accts[0].id)
+        if (res.ok && res.user) {
+          const servers = await api.getServers()
+          await goLive(res.user, servers)
+          setPhase('app')
+        } else {
+          setCheckingAccounts(false)
+        }
+      })
+      .catch(() => setCheckingAccounts(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -99,6 +128,7 @@ function App() {
   const openSettings = () => setSettingsOpen(true)
 
   if (phase === 'login') {
+    if (checkingAccounts) return <AutoLoginScreen name={autoLoginName} />
     return <LoginScreen onMockMode={startMock} />
   }
 
@@ -128,8 +158,10 @@ function App() {
       </div>
 
       <ChannelSidebar onOpenSettings={openSettings} />
-      {showFriends && activeServerId === '@me' ? (
+      {activeServerId === '@me' && showFriends ? (
         <FriendsView />
+      ) : activeServerId === '@me' && showMessageRequests ? (
+        <MessageRequestsView />
       ) : (
         <ChatView onOpenSettings={openSettings} />
       )}
@@ -163,6 +195,27 @@ function App() {
       />
 
       <Lightbox />
+    </div>
+  )
+}
+
+// Shown while auto-logging into the single saved account.
+function AutoLoginScreen({ name }: { name: string }) {
+  return (
+    <div className="relative flex h-screen w-screen items-center justify-center">
+      <div className="app-wallpaper animated" />
+      <div className="drag-region absolute inset-x-0 top-0 z-20 flex h-10 items-center justify-end px-1">
+        <WindowControls />
+      </div>
+      <Glass refract className="flex flex-col items-center gap-4 rounded-3xl px-12 py-9">
+        <div
+          className="h-8 w-8 animate-spin rounded-full border-2 border-white/15"
+          style={{ borderTopColor: 'rgb(var(--c-accent))' }}
+        />
+        <div className="text-sm font-semibold text-text">
+          {name ? `Logging in as ${name}…` : 'Logging in…'}
+        </div>
+      </Glass>
     </div>
   )
 }

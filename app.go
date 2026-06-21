@@ -25,6 +25,10 @@ type App struct {
 	self    *discord.User
 	store   *accountStore
 
+	// Message-request channels learned from gateway READY (REST doesn't flag
+	// them). id -> isSpam; the inbox shows non-spam, all are hidden from DMs.
+	msgReqs []msgReqEntry
+
 	// QR (remote-auth) login.
 	remoteAuth *discord.RemoteAuth
 
@@ -74,6 +78,8 @@ type ChannelDTO struct {
 	AvatarURL  string    `json:"avatarUrl"`
 	Subtitle   string    `json:"subtitle"`
 	Recipients []UserDTO `json:"recipients"`
+	IsMessageRequest bool `json:"isMessageRequest"`
+	IsSpam           bool `json:"isSpam"`
 }
 
 type AttachmentDTO struct {
@@ -836,6 +842,10 @@ func (a *App) GetChannels(guildID string) ([]ChannelDTO, error) {
 func (a *App) GetDMChannels() ([]ChannelDTO, error) {
 	a.mu.Lock()
 	rest := a.rest
+	reqSet := make(map[string]bool, len(a.msgReqs))
+	for _, m := range a.msgReqs {
+		reqSet[m.id] = true
+	}
 	a.mu.Unlock()
 	if rest == nil {
 		return nil, nil
@@ -853,45 +863,168 @@ func (a *App) GetDMChannels() ([]ChannelDTO, error) {
 
 	out := make([]ChannelDTO, 0, len(chans))
 	for _, c := range chans {
-		name := c.Name
-		avatar := ""
-		subtitle := ""
-		if c.Type == discord.ChannelGroupDM {
-			// Group DM: name or member list, generic avatar.
-			if name == "" {
-				names := make([]string, 0, len(c.Recipients))
-				for _, r := range c.Recipients {
-					names = append(names, r.DisplayName())
-				}
-				name = strings.Join(names, ", ")
-			}
-			subtitle = fmt.Sprintf("%d members", len(c.Recipients)+1)
-		} else {
-			// 1:1 DM: use the single recipient's name + avatar.
-			if len(c.Recipients) > 0 {
-				r := c.Recipients[0]
-				if name == "" {
-					name = r.DisplayName()
-				}
-				avatar = r.AvatarURL()
-				subtitle = "@" + r.Username
-			}
+		// Message requests (and spam) live in their own inbox, not the DM list.
+		// REST doesn't flag them, so we exclude by the ids learned from READY.
+		if reqSet[c.ID] {
+			continue
 		}
-		if name == "" {
-			name = "Unknown"
-		}
-		// Include all recipients so the UI can show group-DM members.
-		recips := make([]UserDTO, 0, len(c.Recipients))
-		for _, r := range c.Recipients {
-			recips = append(recips, toUserDTO(r))
-		}
-		out = append(out, ChannelDTO{
-			ID: c.ID, GuildID: "@me", Name: name, Type: "text",
-			IsDM: true, AvatarURL: avatar, Subtitle: subtitle,
-			Recipients: recips,
-		})
+		out = append(out, dmChannelToDTO(c))
 	}
 	return out, nil
+}
+
+// msgReqEntry tracks a message-request channel learned from READY.
+type msgReqEntry struct {
+	id      string
+	spam    bool
+	lastMsg string
+}
+
+// GetMessageRequests lists all pending DM message requests (valid + spam) for
+// the inbox, resolving sender + preview via the supplemental-data endpoint. Each
+// entry is tagged with isSpam so the UI can split them into Requests / Spam.
+func (a *App) GetMessageRequests() ([]ChannelDTO, error) {
+	a.mu.Lock()
+	rest := a.rest
+	reqs := append([]msgReqEntry(nil), a.msgReqs...)
+	a.mu.Unlock()
+	if rest == nil {
+		return nil, nil
+	}
+
+	// Newest first.
+	sort.SliceStable(reqs, func(i, j int) bool {
+		return snowflakeGreater(reqs[i].lastMsg, reqs[j].lastMsg)
+	})
+	spamOf := make(map[string]bool, len(reqs))
+	ids := make([]string, len(reqs))
+	for i, m := range reqs {
+		ids[i] = m.id
+		spamOf[m.id] = m.spam
+	}
+
+	// Resolve previews in batches of 25 (endpoint cap).
+	preview := make(map[string]*discord.Message, len(ids))
+	for i := 0; i < len(ids); i += 25 {
+		end := i + 25
+		if end > len(ids) {
+			end = len(ids)
+		}
+		supp, err := rest.MessageRequestSupplementalData(ids[i:end])
+		if err != nil {
+			continue
+		}
+		for _, s := range supp {
+			if s.MessagePreview != nil {
+				preview[s.ChannelID] = s.MessagePreview
+			}
+		}
+	}
+
+	out := make([]ChannelDTO, 0, len(ids))
+	for _, id := range ids {
+		if p := preview[id]; p != nil {
+			au := p.Author
+			out = append(out, ChannelDTO{
+				ID: id, GuildID: "@me", Name: au.DisplayName(), Type: "text",
+				IsDM: true, AvatarURL: au.AvatarURL(), Subtitle: p.Content,
+				IsMessageRequest: true, IsSpam: spamOf[id], Recipients: []UserDTO{toUserDTO(au)},
+			})
+			continue
+		}
+		// Fallback: no preview — fetch the channel for recipient details.
+		if ch, cerr := rest.Channel(id); cerr == nil && len(ch.Recipients) > 0 {
+			dto := dmChannelToDTO(*ch)
+			dto.IsMessageRequest = true
+			dto.IsSpam = spamOf[id]
+			out = append(out, dto)
+		}
+	}
+	return out, nil
+}
+
+// AcceptMessageRequest consents to a message request (it becomes a normal DM).
+func (a *App) AcceptMessageRequest(channelID string) error {
+	a.mu.Lock()
+	rest := a.rest
+	a.mu.Unlock()
+	if rest == nil {
+		return nil
+	}
+	if err := rest.AcceptMessageRequest(channelID); err != nil {
+		return err
+	}
+	a.dropMessageRequest(channelID)
+	return nil
+}
+
+// DeclineMessageRequest rejects/removes a message request.
+func (a *App) DeclineMessageRequest(channelID string) error {
+	a.mu.Lock()
+	rest := a.rest
+	a.mu.Unlock()
+	if rest == nil {
+		return nil
+	}
+	if err := rest.DeclineMessageRequest(channelID); err != nil {
+		return err
+	}
+	a.dropMessageRequest(channelID)
+	return nil
+}
+
+// dropMessageRequest forgets a message-request channel after accept/decline.
+func (a *App) dropMessageRequest(channelID string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	out := a.msgReqs[:0]
+	for _, m := range a.msgReqs {
+		if m.id != channelID {
+			out = append(out, m)
+		}
+	}
+	a.msgReqs = out
+}
+
+// dmChannelToDTO shapes a DM/group-DM channel for the UI: a "text" channel named
+// after the recipient(s) with avatar + subtitle.
+func dmChannelToDTO(c discord.Channel) ChannelDTO {
+	name := c.Name
+	avatar := ""
+	subtitle := ""
+	if c.Type == discord.ChannelGroupDM {
+		// Group DM: name or member list, generic avatar.
+		if name == "" {
+			names := make([]string, 0, len(c.Recipients))
+			for _, r := range c.Recipients {
+				names = append(names, r.DisplayName())
+			}
+			name = strings.Join(names, ", ")
+		}
+		subtitle = fmt.Sprintf("%d members", len(c.Recipients)+1)
+	} else {
+		// 1:1 DM: use the single recipient's name + avatar.
+		if len(c.Recipients) > 0 {
+			r := c.Recipients[0]
+			if name == "" {
+				name = r.DisplayName()
+			}
+			avatar = r.AvatarURL()
+			subtitle = "@" + r.Username
+		}
+	}
+	if name == "" {
+		name = "Unknown"
+	}
+	recips := make([]UserDTO, 0, len(c.Recipients))
+	for _, r := range c.Recipients {
+		recips = append(recips, toUserDTO(r))
+	}
+	return ChannelDTO{
+		ID: c.ID, GuildID: "@me", Name: name, Type: "text",
+		IsDM: true, AvatarURL: avatar, Subtitle: subtitle,
+		Recipients: recips, IsMessageRequest: c.IsMessageRequest, IsSpam: c.IsSpam,
+	}
 }
 
 // snowflakeGreater reports whether snowflake a is newer than b.
@@ -1650,6 +1783,15 @@ func (a *App) OnReady(r *discord.Ready) {
 	a.mu.Lock()
 	self := r.User
 	a.self = &self
+	// Capture message-request channels (REST won't flag them). Spam goes to a
+	// separate bucket; both are hidden from the normal DM list.
+	reqs := make([]msgReqEntry, 0)
+	for _, c := range r.PrivateChannels {
+		if c.IsMessageRequest || c.IsSpam {
+			reqs = append(reqs, msgReqEntry{id: c.ID, spam: c.IsSpam, lastMsg: c.LastMessageID})
+		}
+	}
+	a.msgReqs = reqs
 	a.mu.Unlock()
 
 	guilds := make([]GuildDTO, 0, len(r.Guilds))
